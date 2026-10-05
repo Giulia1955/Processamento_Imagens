@@ -170,7 +170,6 @@
         const viewerPanel = document.querySelector('.viewer-panel');
         const cameraToggle = document.getElementById('cameraToggle');
         const imageSelect = document.getElementById('imageSelect');
-        const filterButtons = [...document.querySelectorAll('[data-filter], .confirm-button')];
         let stream = null;
         let sendInterval = null;
         let sendTimer = 0;
@@ -178,6 +177,11 @@
         let resultImageUrl = '';
         let editingFilterIndex = null;
         let currentUiState = 'connecting';
+
+        function syncFilterButtonState(isBusy) {
+            document.querySelectorAll('[data-filter], .confirm-button, .active-filter-body, .filter-remove')
+                .forEach(button => { button.disabled = isBusy; });
+        }
 
         function setUiState(state, message = '') {
             currentUiState = state;
@@ -188,15 +192,12 @@
             connectionStatus.textContent = connectionMessages[state] || connectionStatus.textContent;
             connectionStatus.dataset.state = state;
             viewerPanel.setAttribute('aria-busy', String(isBusy));
-            filterButtons.forEach(button => { button.disabled = isBusy; });
+            syncFilterButtonState(isBusy);
             statusMessage.textContent = message || defaultMessage;
             statusMessage.dataset.state = state === 'error' ? 'error' : '';
-            if (state === 'result' || (state === 'error' && hasImage) || (state === 'ready' && hasImage)) {
-                viewerState.classList.add('hidden');
-            } else if (state !== 'loading' && state !== 'processing') {
-                viewerState.textContent = message || defaultMessage;
-                viewerState.classList.toggle('hidden', !defaultMessage && hasImage);
-            }
+            viewerState.textContent = message || defaultMessage;
+            const showViewerState = !hasImage || isBusy;
+            viewerState.classList.toggle('hidden', !showViewerState);
         }
 
         function setStatus(message, state = '') { statusMessage.textContent = message; statusMessage.dataset.state = state; }
@@ -340,7 +341,7 @@
             if (originalImageUrl) {
                 imageObj.src = originalImageUrl;
                 viewerState.classList.add('hidden');
-            } else {
+            } else if (!stream) {
                 imageObj.removeAttribute('src');
                 viewerState.textContent = 'Load an image or start the camera';
                 viewerState.classList.remove('hidden');
