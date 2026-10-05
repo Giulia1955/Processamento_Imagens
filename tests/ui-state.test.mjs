@@ -77,3 +77,16 @@ test('toPayload fills absent parameters with zero', () => {
 
   assert.deepEqual(toPayload(state.filters, name => ids[name]), [0, 1, 0, 0]);
 });
+
+test('filters getter prevents external mutation of state', () => {
+  const state = createFilterState([{ name: 'Canny', values: [5, 50] }]);
+  const snapshot = state.filters;
+
+  snapshot.push({ name: 'Negative', values: [] });
+  snapshot[0].name = 'Negative';
+  snapshot[0].values[0] = 99;
+  snapshot[0].values.push(100);
+
+  assert.deepEqual(state.filters, [{ name: 'Canny', values: [5, 50] }]);
+  assert.deepEqual(state.toPayload(name => ids[name]), [0, 5, 5, 50]);
+});

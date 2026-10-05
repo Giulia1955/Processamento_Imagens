@@ -5,7 +5,12 @@ export function createFilterState(initialFilters = []) {
   }));
 
   return {
-    get filters() { return filters; },
+    get filters() {
+      return filters.map(filter => ({
+        name: filter.name,
+        values: [...filter.values],
+      }));
+    },
     addFilter(name, values = []) {
       filters = [...filters, { name, values: [...values] }];
     },
