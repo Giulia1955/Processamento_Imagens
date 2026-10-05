@@ -42,6 +42,18 @@ test('removeFilter removes the first filter', () => {
   assert.deepEqual(state.filters, [{ name: 'Negative', values: [] }]);
 });
 
+test('removing the first item leaves middle and last items ordered', () => {
+  const state = createFilterState([
+    { name: 'Grayscale', values: [] },
+    { name: 'Canny', values: [5, 50] },
+    { name: 'Negative', values: [] },
+  ]);
+
+  state.removeFilter(0);
+
+  assert.deepEqual(state.filters.map(filter => filter.name), ['Canny', 'Negative']);
+});
+
 test('removeFilter removes the last filter', () => {
   const state = createFilterState([
     { name: 'Grayscale', values: [] },
@@ -76,6 +88,14 @@ test('toPayload fills absent parameters with zero', () => {
   const state = createFilterState([{ name: 'Negative', values: [] }]);
 
   assert.deepEqual(toPayload(state.filters, name => ids[name]), [0, 1, 0, 0]);
+});
+
+test('clearing the last filter produces the empty payload', () => {
+  const state = createFilterState([{ name: 'Negative', values: [] }]);
+
+  state.removeFilter(0);
+
+  assert.deepEqual(state.toPayload(ids), [0]);
 });
 
 test('filters getter prevents external mutation of state', () => {

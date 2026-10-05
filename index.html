@@ -65,9 +65,10 @@
         #filters { display: flex; gap: 0.6rem; min-height: 54px; overflow-x: auto; padding-bottom: 0.2rem; }
         .empty-filters { align-self: center; color: var(--muted-text); font-size: 0.85rem; }
         .active-filter { display: flex; flex: 0 0 auto; align-items: center; gap: 0.7rem; min-width: 170px; max-width: 280px; min-height: 48px; padding: 0.45rem 0.5rem 0.45rem 0.8rem; border: 1px solid var(--line); border-radius: 6px; color: var(--soft-text); background: var(--teal-surface); }
-        .active-filter span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .remove-filter { min-width: 34px; min-height: 34px; padding: 0; color: var(--coral); background: transparent; }
-        .remove-filter:hover { color: var(--soft-text); background: var(--coral); }
+        .active-filter-body { flex: 1; min-width: 0; min-height: 34px; padding: 0; overflow: hidden; border: 0; color: var(--soft-text); background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+        .active-filter-body:hover { background: transparent; border-color: transparent; }
+        .filter-remove { min-width: 34px; min-height: 34px; padding: 0; color: var(--coral); background: transparent; }
+        .filter-remove:hover { color: var(--soft-text); background: var(--coral); }
         #statusMessage { min-height: 1.3rem; color: var(--muted-text); font-size: 0.85rem; }
         #statusMessage[data-state="error"] { color: var(--coral); }
         .hidden { display: none !important; }
@@ -169,6 +170,8 @@
         let stream = null;
         let sendInterval = null;
         let sendTimer = 0;
+        let originalImageUrl = '';
+        let editingFilterIndex = null;
 
         function setStatus(message, state = '') { statusMessage.textContent = message; statusMessage.dataset.state = state; }
         function setTimer(ms) { sendTimer += ms / 1000; }
@@ -189,23 +192,108 @@
             reader.onload = () => { const fileData = new Uint8Array(reader.result); const data = new Uint8Array(fileData.length + 1); data[0] = type; data.set(fileData, 1); if (ws.readyState === WebSocket.OPEN) { ws.send(data); clearInterval(sendInterval); sendTimer = 0; sendInterval = setInterval(() => setTimer(100), 100); setStatus('Processing image...'); } };
             reader.readAsArrayBuffer(image);
         }
-        function updateImage() { if (imageUpload.files.length > 0) sendData(imageUpload.files[0], 1); }
+        function updateImage() {
+            if (imageUpload.files.length === 0) return;
+            if (originalImageUrl) URL.revokeObjectURL(originalImageUrl);
+            originalImageUrl = URL.createObjectURL(imageUpload.files[0]);
+            imageObj.src = originalImageUrl;
+            viewerState.classList.add('hidden');
+            sendData(imageUpload.files[0], 1);
+        }
         function hideParameters() { document.querySelectorAll('.filter-control input, .filter-control .check-row, .confirm-button').forEach(element => element.classList.add('hidden')); }
         function setFilter(filter) {
             hideParameters();
+            editingFilterIndex = null;
             if (filter === 'Canny') { document.getElementById('canny1').classList.remove('hidden'); document.getElementById('canny2').classList.remove('hidden'); document.getElementById('canny3').classList.remove('hidden'); }
             else if (filter === 'Histogram') { document.getElementById('hist').classList.remove('hidden'); document.getElementById('hist3').classList.remove('hidden'); }
             else if (['Mean', 'Median', 'Erode', 'Dilate', 'Opening', 'Closing', 'Area', 'Perimeter', 'Diameter', 'Threshold'].includes(filter)) document.getElementById(`kernel${filter}`).classList.remove('hidden');
             else addFilter(filter, [0, 0]);
         }
         function addFilter(filter, values) { filterState.addFilter(filter, values); renderActiveFilters(); sendFilters(); }
+        function editFilterAt(index) {
+            const filter = filterState.filters[index];
+            if (!filter || !['Canny', 'Histogram', 'Mean', 'Median', 'Erode', 'Dilate', 'Opening', 'Closing', 'Area', 'Perimeter', 'Diameter', 'Threshold'].includes(filter.name)) return;
+            editingFilterIndex = index;
+            hideParameters();
+            if (filter.name === 'Canny') {
+                canny1 = filter.values[0] ?? 5;
+                canny2 = filter.values[1] ?? 50;
+                document.getElementById('canny1').value = canny1;
+                document.getElementById('canny2').value = canny2;
+                document.getElementById('canny1').classList.remove('hidden');
+                document.getElementById('canny2').classList.remove('hidden');
+                document.getElementById('canny3').classList.remove('hidden');
+            } else if (filter.name === 'Histogram') {
+                hist1 = Boolean(filter.values[0]);
+                hist2 = Boolean(filter.values[1]);
+                document.getElementById('hist1').checked = hist1;
+                document.getElementById('hist2').checked = hist2;
+                document.getElementById('hist').classList.remove('hidden');
+                document.getElementById('hist3').classList.remove('hidden');
+            } else {
+                const input = document.getElementById(`kernel${filter.name}`);
+                input.value = filter.values[0] ?? input.value;
+                input.classList.remove('hidden');
+            }
+        }
+        function commitFilter(filter, values) {
+            if (editingFilterIndex === null) filterState.addFilter(filter, values);
+            else filterState.updateFilter(editingFilterIndex, filter, values);
+            editingFilterIndex = null;
+            renderActiveFilters();
+            sendFilters();
+        }
+        function createRemoveButton(filter, index) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'filter-remove';
+            button.textContent = 'X';
+            button.title = `Remove ${filter.name}`;
+            button.setAttribute('aria-label', `Remove filter ${filter.name}`);
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                removeFilterAt(index);
+            });
+            return button;
+        }
         function renderActiveFilters() {
             const rail = document.getElementById('filters');
             rail.replaceChildren();
             const filters = filterState.filters;
             document.getElementById('filterCount').textContent = filters.length;
             if (filters.length === 0) { const empty = document.createElement('p'); empty.className = 'empty-filters'; empty.textContent = 'No filters applied'; rail.appendChild(empty); return; }
-            filters.forEach(filter => { const item = document.createElement('div'); item.className = 'active-filter'; item.setAttribute('role', 'listitem'); const label = document.createElement('span'); label.textContent = formatFilterLabel(filter); item.appendChild(label); rail.appendChild(item); });
+            filters.forEach((filter, index) => {
+                const item = document.createElement('div');
+                item.className = 'active-filter';
+                item.setAttribute('role', 'listitem');
+                const body = document.createElement('button');
+                body.type = 'button';
+                body.className = 'active-filter-body';
+                body.textContent = formatFilterLabel(filter);
+                body.title = `Edit ${filter.name}`;
+                body.setAttribute('aria-label', `Edit filter ${filter.name}`);
+                body.addEventListener('click', () => editFilterAt(index));
+                item.appendChild(body);
+                item.appendChild(createRemoveButton(filter, index));
+                rail.appendChild(item);
+            });
+        }
+        function updateViewerAfterFilterChange() {
+            if (filterState.filters.length > 0) return;
+            if (originalImageUrl) {
+                imageObj.src = originalImageUrl;
+                viewerState.classList.add('hidden');
+            } else {
+                imageObj.removeAttribute('src');
+                viewerState.textContent = 'Load an image or start the camera';
+                viewerState.classList.remove('hidden');
+            }
+        }
+        function removeFilterAt(index) {
+            filterState.removeFilter(index);
+            renderActiveFilters();
+            sendFilters();
+            updateViewerAfterFilterChange();
         }
         function sendFilters() {
             const data = new Uint8Array(filterState.toPayload(filter => func2byte[filter]));
@@ -225,9 +313,16 @@
         document.getElementById('canny2').addEventListener('change', event => { canny2 = parseInt(event.target.value, 10); });
         document.getElementById('hist1').addEventListener('change', event => { hist1 = event.target.checked; });
         document.getElementById('hist2').addEventListener('change', event => { hist2 = event.target.checked; });
-        document.getElementById('canny3').addEventListener('click', () => addFilter('Canny', [canny1, canny2]));
-        document.getElementById('hist3').addEventListener('click', () => addFilter('Histogram', [hist1, hist2]));
-        document.querySelectorAll('input[type="number"]').forEach(input => input.addEventListener('change', event => { if (!event.target.value) return; const filter = event.target.id.replace('kernel', ''); if (func2byte[filter] !== undefined) addFilter(filter, [parseInt(event.target.value, 10)]); }));
+        document.getElementById('canny3').addEventListener('click', () => commitFilter('Canny', [canny1, canny2]));
+        document.getElementById('hist3').addEventListener('click', () => commitFilter('Histogram', [hist1, hist2]));
+        document.querySelectorAll('input[type="number"]').forEach(input => input.addEventListener('change', event => {
+            if (!event.target.value) return;
+            const filter = event.target.id.replace('kernel', '');
+            if (func2byte[filter] === undefined) return;
+            const values = [parseInt(event.target.value, 10)];
+            if (editingFilterIndex === null) addFilter(filter, values);
+            else commitFilter(filter, values);
+        }));
     </script>
 </body>
 </html>
