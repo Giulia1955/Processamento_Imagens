@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 import cv2
 import time
 
+#
 def escala_cinza(img):
     if len(img.shape) > 2:
         img = img[0:-1, 0:-1, 0]/3 + img[0:-1, 0:-1, 1]/3 + img[0:-1, 0:-1, 2]/3
     return img.astype(np.uint8)
-
+#
 def negativo(img):
     return 255-img
 
@@ -19,7 +20,7 @@ def normalizacao(img, minVal=0, maxVal=255):
     b = img.max()
     img = (img-a)*((maxVal-minVal)/(b-a))+minVal
     return img.astype(np.uint8)
-
+#
 def histograma(img, histTitle='', norm=False, cum=False, plot=True):
     if plot:
         fig, ax = plt.subplots()
@@ -37,7 +38,7 @@ def histograma(img, histTitle='', norm=False, cum=False, plot=True):
         plt.close()
         return cv2.cvtColor(img_plot, cv2.COLOR_RGBA2BGR)
     return hist
-
+#
 def Otsu(img):
     hist = histograma(img, plot=False)
     total = img.shape[0]*img.shape[1]
@@ -89,7 +90,7 @@ def kernelPass(func, **kwargs):
     print(f'Kernel pass: {time.time()-start}s')
     return normalizacao
     (newImg)
-
+#
 def neighboorMean(img, window):
     newImg = np.zeros(img.shape)
     halfW = window >> 1
@@ -112,7 +113,7 @@ def neighboorMean(img, window):
             newImg[pty, ptx] = np.mean(img[pty-halfW:pty+halfW+extraAdd, ptx-halfW:ptx+halfW+extraAdd])
     
     return kernelPass(func, img=img, newImg=newImg, pty=pty, ptx=ptx, halfW=halfW, extraAdd=extraAdd)
-
+#
 def neighboorMedian(img, window):
     newImg = np.zeros(img.shape)
     halfW = window >> 1
@@ -135,23 +136,23 @@ def neighboorMedian(img, window):
             newImg[pty, ptx] = np.median(img[pty-halfW:pty+halfW+extraAdd, ptx-halfW:ptx+halfW+extraAdd])
     
     return kernelPass(func, img=img, newImg=newImg, pty=pty, ptx=ptx, halfW=halfW, extraAdd=extraAdd)
-
+#
 def Canny(img, t1, t2):
     return cv2.Canny(img, t1, t2)
-
+#
 def erode(img, kernelSize):
     kernel = np.ones((kernelSize, kernelSize), np.uint8)
     return cv2.erode(img, kernel)
-
+#
 def dilate(img, kernelSize):
     kernel = np.ones((kernelSize, kernelSize), np.uint8)
     return cv2.dilate(img, kernel)
-
+#
 def opening(img, kernelSize):
     kernel = np.ones((kernelSize, kernelSize), np.uint8)
     img1 = cv2.erode(img, kernel)
     return cv2.dilate(img1, kernel)
-
+#
 def closing(img, kernelSize):
     kernel = np.ones((kernelSize, kernelSize), np.uint8)
     img1 = cv2.dilate(img, kernel)
@@ -309,6 +310,70 @@ def objectsVideo(img):
 
     return result
 
+
+def _component_detections(mask, min_area):
+    count, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, 8)
+    border_labels = set(labels[0, :]) | set(labels[-1, :]) | set(labels[:, 0]) | set(labels[:, -1])
+    detections = []
+    for label in range(1, count):
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area < min_area or label in border_labels:
+            continue
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        object_width = int(stats[label, cv2.CC_STAT_WIDTH])
+        object_height = int(stats[label, cv2.CC_STAT_HEIGHT])
+        center = tuple(float(value) for value in centroids[label])
+        detections.append({
+            'bbox': (x, y, object_width, object_height),
+            'center': center,
+        })
+    return detections
+
+
+def detect_objects(img, min_area=400):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) > 2 else img
+    _, thresholded = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    candidates = [
+        _component_detections(thresholded, min_area),
+        _component_detections(cv2.bitwise_not(thresholded), min_area),
+    ]
+    detections = max(candidates, key=lambda items: (len(items), sum(item['bbox'][2] * item['bbox'][3] for item in items)))
+    annotated = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    for detection in detections:
+        x, y, width, height = detection['bbox']
+        cv2.rectangle(annotated, (x, y), (x + width, y + height), (0, 255, 0), 2)
+    return annotated, detections
+
+
+def match_detections(previous, current, max_distance=80):
+    unmatched = set(range(len(previous)))
+    matched = []
+    previous_numbers = [
+        int(item['id'].split('-')[-1])
+        for item in previous
+        if str(item.get('id', '')).startswith('object-') and item['id'].split('-')[-1].isdigit()
+    ]
+    next_id = max(previous_numbers, default=0) + 1
+    for detection in current:
+        best_index = None
+        best_distance = max_distance
+        for index in unmatched:
+            previous_center = np.array(previous[index]['center'])
+            current_center = np.array(detection['center'])
+            distance = float(np.linalg.norm(previous_center - current_center))
+            if distance <= best_distance:
+                best_index = index
+                best_distance = distance
+        if best_index is None:
+            detection_id = f'object-{next_id}'
+            next_id += 1
+        else:
+            detection_id = previous[best_index]['id']
+            unmatched.remove(best_index)
+        matched.append({**detection, 'id': detection_id})
+    return matched
+
 def objects(img):
     count = 0
     poss = []
@@ -332,15 +397,10 @@ def objects(img):
         mask = cv2.putText(mask, f'{pos[2]}', (pos[1], pos[0]+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color=(0, 0, 255))
     return mask
 
-def trackVideo(img, tracker):
-    if len(img.shape) <= 2:
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    success, bbox = tracker.update(img)
 
-    if success:
-        (x, y, w, h) = [int(a) for a in bbox]
-        cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
-    return img
+def trackVideo(img, previous_detections=None):
+    annotated, detections = detect_objects(img)
+    return annotated, match_detections(previous_detections or [], detections)
 
 def videoMean(img, kernelSize):
     return cv2.filter2D(img,-1,np.ones((kernelSize, kernelSize), np.float32)/(kernelSize*kernelSize)).astype(np.uint8)

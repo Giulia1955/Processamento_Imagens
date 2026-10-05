@@ -152,7 +152,7 @@
     <video id="cameraVideo" class="hidden" autoplay muted></video>
 
     <script type="module">
-        import { createFilterState, formatFilterLabel, getViewerMessage } from './ui-state.mjs';
+        import { createFilterState, formatFilterLabel, getNewDetectionIds, getViewerMessage, shouldShowProcessingFeedback } from './ui-state.mjs';
 
         const filterState = createFilterState();
         let canny1 = 5;
@@ -178,6 +178,16 @@
         let resultImageUrl = '';
         let editingFilterIndex = null;
         let currentUiState = 'connecting';
+        let previousDetectionIds = [];
+        const detectionAudio = new Audio('./detection.mp3');
+
+        function playDetectionAudio() {
+            try {
+                detectionAudio.currentTime = 0;
+                const playback = detectionAudio.play();
+                if (playback) playback.catch(() => {});
+            } catch {}
+        }
 
         function syncFilterButtonState(isBusy) {
             document.querySelectorAll('[data-filter], .confirm-button, .active-filter-body, .filter-remove')
@@ -217,6 +227,12 @@
                 let message = event.data;
                 try {
                     const payload = JSON.parse(event.data);
+                    if (payload.type === 'detections') {
+                        const objects = Array.isArray(payload.objects) ? payload.objects : [];
+                        if (getNewDetectionIds(previousDetectionIds, objects).length > 0) playDetectionAudio();
+                        previousDetectionIds = objects.map(object => object.id).filter(Boolean);
+                        return;
+                    }
                     message = payload.error || payload.message || event.data;
                 } catch {}
                 setUiState('error', message);
@@ -242,6 +258,7 @@
                 stream.getTracks().forEach(track => track.stop());
                 videoObj.srcObject = null;
                 stream = null;
+                previousDetectionIds = [];
                 if (cameraReadyHandler) {
                     videoObj.removeEventListener('loadedmetadata', cameraReadyHandler);
                     videoObj.removeEventListener('playing', cameraReadyHandler);
@@ -255,6 +272,7 @@
             navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(cameraStream => {
                 if (originalImageUrl) URL.revokeObjectURL(originalImageUrl);
                 originalImageUrl = '';
+                previousDetectionIds = [];
                 stream = cameraStream;
                 videoObj.srcObject = stream;
                 imageUpload.value = '';
@@ -263,16 +281,30 @@
                 scheduleVideoCapture();
             }).catch(() => setUiState('error', 'Camera permission was not granted.'));
         }
-        function selectImage() { if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; cameraToggle.textContent = 'Start camera'; } imageUpload.click(); }
+        function selectImage() { if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; previousDetectionIds = []; cameraToggle.textContent = 'Start camera'; } imageUpload.click(); }
         function sendData(image, type) {
-            setUiState('loading');
+            const showProcessingFeedback = shouldShowProcessingFeedback(type);
+            if (showProcessingFeedback) setUiState('loading');
             const reader = new FileReader();
             reader.onerror = () => setUiState('error', 'Could not load the image.');
-            reader.onload = () => { const fileData = new Uint8Array(reader.result); const data = new Uint8Array(fileData.length + 1); data[0] = type; data.set(fileData, 1); if (ws.readyState === WebSocket.OPEN) { ws.send(data); clearInterval(sendInterval); sendTimer = 0; sendInterval = setInterval(() => setTimer(100), 100); setUiState('processing'); } else setUiState('error', 'Processor is unavailable.'); };
+            reader.onload = () => {
+                const fileData = new Uint8Array(reader.result);
+                const data = new Uint8Array(fileData.length + 1);
+                data[0] = type;
+                data.set(fileData, 1);
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(data);
+                    clearInterval(sendInterval);
+                    sendTimer = 0;
+                    sendInterval = setInterval(() => setTimer(100), 100);
+                    if (showProcessingFeedback) setUiState('processing');
+                } else setUiState('error', 'Processor is unavailable.');
+            };
             reader.readAsArrayBuffer(image);
         }
         function updateImage() {
             if (imageUpload.files.length === 0) return;
+            previousDetectionIds = [];
             if (originalImageUrl) URL.revokeObjectURL(originalImageUrl);
             originalImageUrl = URL.createObjectURL(imageUpload.files[0]);
             imageObj.src = originalImageUrl;
@@ -377,6 +409,7 @@
         }
         function sendFilters() {
             if (!imageObj.getAttribute('src') && !stream) return;
+            if (!filterState.filters.some(filter => filter.name === 'Tracking')) previousDetectionIds = [];
             const data = new Uint8Array(filterState.toPayload(filter => func2byte[filter]));
             if (ws.readyState === WebSocket.OPEN) { setUiState('processing'); ws.send(data); }
             else setUiState('error', 'Processor is unavailable.');

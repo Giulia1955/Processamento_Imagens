@@ -1,4 +1,8 @@
 
+
+
+
+
 # Atendimento dos requisitos de processamento de imagens
 
 ## Objetivo
@@ -29,22 +33,6 @@ As lacunas ou problemas identificados são:
 6. Há exceções amplas e silenciosas no processamento de imagem e vídeo, que
    escondem falhas reais.
 
-### Funcionalidades que podem ser apresentadas como bônus
-
-Os itens abaixo não são exigidos explicitamente pela rubrica, mas já aparecem
-no projeto ou serão preservados como diferenciais. Eles deverão receber
-comentários no código identificando-os como bônus:
-
-- `limiarizacao`: permite escolher manualmente o limiar, além do Otsu exigido.
-- `normalizacao`: normaliza a faixa de intensidades da imagem.
-- `calcular_histograma`: oferece opções cumulativa e normalizada.
-- `suavizacao_media` e `suavizacao_mediana`: possuem implementação manual
-  para imagens, em vez de depender apenas das funções prontas do OpenCV.
-- `rastrear_objeto`: usa o rastreador KCF, enquanto a exigência permite
-  qualquer algoritmo de rastreamento.
-- As versões de filtros e métricas aplicáveis a vídeo permitem operar sobre
-  quadros da câmera em tempo real, além do mínimo necessário para imagens.
-
 ## Desenho técnico
 
 ### Padronização de nomes
@@ -72,9 +60,6 @@ exigências. Exemplos:
 
 Os mapas de funções em `main.py` e as chamadas de vídeo serão atualizados
 junto com os nomes, sem aliases duplicados desnecessários.
-
-Comentários curtos `# BÔNUS:` serão colocados somente nas funções acima, sem
-adicionar comentários redundantes às funções obrigatórias.
 
 ### Processamento de imagens
 

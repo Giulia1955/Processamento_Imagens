@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFilterState, formatFilterLabel, getViewerMessage, toPayload } from '../ui-state.mjs';
+import {
+  createFilterState,
+  formatFilterLabel,
+  getViewerMessage,
+  getNewDetectionIds,
+  shouldShowProcessingFeedback,
+  toPayload,
+} from '../ui-state.mjs';
 
 const ids = { Grayscale: 0, Canny: 5, Negative: 1 };
 
@@ -19,6 +26,22 @@ test('getViewerMessage returns the exact message for each viewer state', () => {
     ],
   );
   assert.equal(getViewerMessage('unknown'), '');
+});
+
+test('continuous camera frames do not show transient processing feedback', () => {
+  assert.equal(shouldShowProcessingFeedback(1), true);
+  assert.equal(shouldShowProcessingFeedback(2), false);
+});
+
+test('new detection ids exclude objects already present', () => {
+  assert.deepEqual(
+    getNewDetectionIds(['object-1'], [{ id: 'object-1' }, { id: 'object-2' }]),
+    ['object-2'],
+  );
+});
+
+test('an object is new again after the detection list becomes empty', () => {
+  assert.deepEqual(getNewDetectionIds([], [{ id: 'object-1' }]), ['object-1']);
 });
 
 test('removeFilter removes only the selected filter and preserves order', () => {

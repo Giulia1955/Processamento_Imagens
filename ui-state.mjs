@@ -47,6 +47,17 @@ export function getViewerMessage(state) {
   }[state] || '';
 }
 
+export function shouldShowProcessingFeedback(sourceType) {
+  return sourceType !== 2;
+}
+
+export function getNewDetectionIds(previousIds, currentObjects) {
+  const previous = new Set(previousIds);
+  return currentObjects
+    .map(object => object.id)
+    .filter(id => id && !previous.has(id));
+}
+
 export function toPayload(filters, getFilterId) {
   return [0, ...filters.flatMap(filter => [
     getFilterId(filter.name),

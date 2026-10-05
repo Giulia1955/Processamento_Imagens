@@ -64,6 +64,7 @@ const ids = { Grayscale: 0, Canny: 5, Negative: 1 };
 
   assert.deepEqual(state.filters, [
     { name: 'Grayscale', values: [] },
+    
     { name: 'Negative', values: [] },
   ]);
 });

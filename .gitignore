@@ -5,3 +5,7 @@ __pycache__/
 *.pdf
 .venv/
 .worktrees/
+.superpowers/
+.pytest_cache/
+.docs/
+.tests/
