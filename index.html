@@ -129,9 +129,9 @@
                     <section class="filter-group" aria-labelledby="measurements-title">
                         <h2 id="measurements-title" class="filter-group-title">Measurements</h2>
                         <div class="filter-control"><button type="button" data-filter="Histogram">Histogram</button><div id="hist" class="check-row hidden"><label><input type="checkbox" id="hist1"> Cumulative</label><label><input type="checkbox" id="hist2"> Normalized</label></div><button id="hist3" type="button" class="confirm-button hidden">Apply histogram</button></div>
-                        <div class="filter-control"><button type="button" data-filter="Area">Area</button><label for="kernelArea">Pixel size</label><input type="number" id="kernelArea" min="0" max="255" value="0" class="hidden"></div>
-                        <div class="filter-control"><button type="button" data-filter="Perimeter">Perimeter</button><label for="kernelPerimeter">Pixel size</label><input type="number" id="kernelPerimeter" min="0" max="255" value="0" class="hidden"></div>
-                        <div class="filter-control"><button type="button" data-filter="Diameter">Diameter</button><label for="kernelDiameter">Pixel size</label><input type="number" id="kernelDiameter" min="0" max="255" value="0" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Area">Area</button><label for="kernelArea">Pixel size</label><input type="number" id="kernelArea" min="1" max="255" value="1" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Perimeter">Perimeter</button><label for="kernelPerimeter">Pixel size</label><input type="number" id="kernelPerimeter" min="1" max="255" value="1" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Diameter">Diameter</button><label for="kernelDiameter">Pixel size</label><input type="number" id="kernelDiameter" min="1" max="255" value="1" class="hidden"></div>
                         <div class="filter-control"><button type="button" data-filter="Counting">Object counting</button></div>
                     </section>
                     <section class="filter-group" aria-labelledby="tracking-title">
@@ -174,6 +174,7 @@
         let sendInterval = null;
         let sendTimer = 0;
         let originalImageUrl = '';
+        let cameraReadyHandler = null;
         let resultImageUrl = '';
         let editingFilterIndex = null;
         let currentUiState = 'connecting';
@@ -233,13 +234,34 @@
             resultImageUrl = URL.createObjectURL(event.data);
             imageObj.src = resultImageUrl;
             setUiState('result');
-            if (stream) requestAnimationFrame(sendVideoToServer);
+            if (stream) scheduleVideoCapture();
         });
 
         function toggleCamera() {
-            if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; cameraToggle.textContent = 'Start camera'; setUiState(originalImageUrl ? 'result' : 'ready', 'Camera stopped.'); return; }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                videoObj.srcObject = null;
+                stream = null;
+                if (cameraReadyHandler) {
+                    videoObj.removeEventListener('loadedmetadata', cameraReadyHandler);
+                    videoObj.removeEventListener('playing', cameraReadyHandler);
+                    cameraReadyHandler = null;
+                }
+                cameraToggle.textContent = 'Start camera';
+                setUiState(originalImageUrl ? 'result' : 'ready', 'Camera stopped.');
+                return;
+            }
             setUiState('loading', 'Starting camera');
-            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(cameraStream => { stream = cameraStream; videoObj.srcObject = stream; imageUpload.value = ''; cameraToggle.textContent = 'Stop camera'; setUiState('ready', 'Camera ready.'); requestAnimationFrame(sendVideoToServer); }).catch(() => setUiState('error', 'Camera permission was not granted.'));
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(cameraStream => {
+                if (originalImageUrl) URL.revokeObjectURL(originalImageUrl);
+                originalImageUrl = '';
+                stream = cameraStream;
+                videoObj.srcObject = stream;
+                imageUpload.value = '';
+                cameraToggle.textContent = 'Stop camera';
+                setUiState('ready', 'Camera ready.');
+                scheduleVideoCapture();
+            }).catch(() => setUiState('error', 'Camera permission was not granted.'));
         }
         function selectImage() { if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; cameraToggle.textContent = 'Start camera'; } imageUpload.click(); }
         function sendData(image, type) {
@@ -359,8 +381,22 @@
             if (ws.readyState === WebSocket.OPEN) { setUiState('processing'); ws.send(data); }
             else setUiState('error', 'Processor is unavailable.');
         }
+        function scheduleVideoCapture() {
+            if (!stream) return;
+            if (videoObj.readyState >= 2) { requestAnimationFrame(sendVideoToServer); return; }
+            if (cameraReadyHandler) return;
+            cameraReadyHandler = () => {
+                videoObj.removeEventListener('loadedmetadata', cameraReadyHandler);
+                videoObj.removeEventListener('playing', cameraReadyHandler);
+                cameraReadyHandler = null;
+                if (stream) requestAnimationFrame(sendVideoToServer);
+            };
+            videoObj.addEventListener('loadedmetadata', cameraReadyHandler);
+            videoObj.addEventListener('playing', cameraReadyHandler);
+        }
         function sendVideoToServer() {
-            if (!stream || videoObj.readyState < 2) return;
+            if (!stream) return;
+            if (videoObj.readyState < 2) { scheduleVideoCapture(); return; }
             canvas.width = videoObj.videoWidth; canvas.height = videoObj.videoHeight; ctx.drawImage(videoObj, 0, 0, canvas.width, canvas.height);
             canvas.toBlob(blob => { if (blob) sendData(blob, 2); }, 'image/png');
         }
