@@ -1,8 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFilterState, formatFilterLabel, toPayload } from '../ui-state.mjs';
+import { createFilterState, formatFilterLabel, getViewerMessage, toPayload } from '../ui-state.mjs';
 
 const ids = { Grayscale: 0, Canny: 5, Negative: 1 };
+
+test('getViewerMessage returns the exact message for each viewer state', () => {
+  assert.deepEqual(
+    ['connecting', 'ready', 'loading', 'processing', 'result', 'error', 'disconnected']
+      .map(state => [state, getViewerMessage(state)]),
+    [
+      ['connecting', 'Connecting to processor'],
+      ['ready', 'Load an image or start the camera'],
+      ['loading', 'Loading image'],
+      ['processing', 'Applying filters'],
+      ['result', ''],
+      ['error', 'Something went wrong'],
+      ['disconnected', 'Processor unavailable'],
+    ],
+  );
+  assert.equal(getViewerMessage('unknown'), '');
+});
 
 test('removeFilter removes only the selected filter and preserves order', () => {
   const state = createFilterState([

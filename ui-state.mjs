@@ -35,6 +35,18 @@ export function formatFilterLabel(filter) {
   return `${filter.name} ${'\u00b7'} ${values.join(' / ')}`;
 }
 
+export function getViewerMessage(state) {
+  return {
+    connecting: 'Connecting to processor',
+    ready: 'Load an image or start the camera',
+    loading: 'Loading image',
+    processing: 'Applying filters',
+    result: '',
+    error: 'Something went wrong',
+    disconnected: 'Processor unavailable',
+  }[state] || '';
+}
+
 export function toPayload(filters, getFilterId) {
   return [0, ...filters.flatMap(filter => [
     getFilterId(filter.name),

@@ -152,7 +152,7 @@
     <video id="cameraVideo" class="hidden" autoplay muted></video>
 
     <script type="module">
-        import { createFilterState, formatFilterLabel } from './ui-state.mjs';
+        import { createFilterState, formatFilterLabel, getViewerMessage } from './ui-state.mjs';
 
         const filterState = createFilterState();
         let canny1 = 5;
@@ -167,29 +167,85 @@
         const connectionStatus = document.getElementById('connectionStatus');
         const viewerState = document.getElementById('viewerState');
         const statusMessage = document.getElementById('statusMessage');
+        const viewerPanel = document.querySelector('.viewer-panel');
+        const cameraToggle = document.getElementById('cameraToggle');
+        const imageSelect = document.getElementById('imageSelect');
+        const filterButtons = [...document.querySelectorAll('[data-filter], .confirm-button')];
         let stream = null;
         let sendInterval = null;
         let sendTimer = 0;
         let originalImageUrl = '';
+        let resultImageUrl = '';
         let editingFilterIndex = null;
+        let currentUiState = 'connecting';
+
+        function setUiState(state, message = '') {
+            currentUiState = state;
+            const defaultMessage = getViewerMessage(state);
+            const hasImage = Boolean(imageObj.getAttribute('src')) || Boolean(stream);
+            const isBusy = state === 'loading' || state === 'processing';
+            const connectionMessages = { connecting: 'Connecting', ready: 'Connected', disconnected: 'Disconnected', error: 'Connection error' };
+            connectionStatus.textContent = connectionMessages[state] || connectionStatus.textContent;
+            connectionStatus.dataset.state = state;
+            viewerPanel.setAttribute('aria-busy', String(isBusy));
+            filterButtons.forEach(button => { button.disabled = isBusy; });
+            statusMessage.textContent = message || defaultMessage;
+            statusMessage.dataset.state = state === 'error' ? 'error' : '';
+            if (state === 'result' || (state === 'error' && hasImage) || (state === 'ready' && hasImage)) {
+                viewerState.classList.add('hidden');
+            } else if (state !== 'loading' && state !== 'processing') {
+                viewerState.textContent = message || defaultMessage;
+                viewerState.classList.toggle('hidden', !defaultMessage && hasImage);
+            }
+        }
 
         function setStatus(message, state = '') { statusMessage.textContent = message; statusMessage.dataset.state = state; }
         function setTimer(ms) { sendTimer += ms / 1000; }
 
+        setUiState('connecting');
         const ws = new WebSocket('ws:localhost:8080');
-        ws.addEventListener('open', () => { connectionStatus.textContent = 'Connected'; connectionStatus.dataset.state = 'ready'; ws.send(new Uint8Array([0])); setStatus('Ready for an image.'); });
-        ws.addEventListener('close', () => { connectionStatus.textContent = 'Disconnected'; connectionStatus.dataset.state = 'error'; setStatus('Connection lost. Restart the server and try again.', 'error'); });
-        ws.addEventListener('error', () => { connectionStatus.textContent = 'Connection error'; connectionStatus.dataset.state = 'error'; setStatus('Could not connect to the image processor.', 'error'); });
-        ws.addEventListener('message', event => { imageObj.src = URL.createObjectURL(event.data); viewerState.classList.add('hidden'); clearInterval(sendInterval); sendInterval = null; setStatus('Result updated.'); if (stream) requestAnimationFrame(sendVideoToServer); });
+        ws.binaryType = 'blob';
+        ws.addEventListener('open', () => { setUiState('ready'); ws.send(new Uint8Array([0])); });
+        ws.addEventListener('close', () => { clearInterval(sendInterval); sendInterval = null; setUiState('disconnected'); });
+        ws.addEventListener('error', () => { clearInterval(sendInterval); sendInterval = null; setUiState('error', 'Could not connect to the image processor.'); });
+        ws.addEventListener('message', async event => {
+            clearInterval(sendInterval);
+            sendInterval = null;
+            if (typeof event.data === 'string') {
+                let message = event.data;
+                try {
+                    const payload = JSON.parse(event.data);
+                    message = payload.error || payload.message || event.data;
+                } catch {}
+                setUiState('error', message);
+                return;
+            }
+            if (event.data instanceof Blob && event.data.type && !event.data.type.startsWith('image/png')) {
+                setUiState('error', await event.data.text());
+                return;
+            }
+            if (!(event.data instanceof Blob) && !(event.data instanceof ArrayBuffer)) {
+                setUiState('error');
+                return;
+            }
+            if (resultImageUrl) URL.revokeObjectURL(resultImageUrl);
+            resultImageUrl = URL.createObjectURL(event.data);
+            imageObj.src = resultImageUrl;
+            setUiState('result');
+            if (stream) requestAnimationFrame(sendVideoToServer);
+        });
 
         function toggleCamera() {
-            if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; document.getElementById('cameraToggle').textContent = 'Start camera'; setStatus('Camera stopped.'); return; }
-            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(cameraStream => { stream = cameraStream; videoObj.srcObject = stream; imageUpload.value = ''; document.getElementById('cameraToggle').textContent = 'Stop camera'; setStatus('Camera active.'); requestAnimationFrame(sendVideoToServer); }).catch(() => setStatus('Camera permission was not granted.', 'error'));
+            if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; cameraToggle.textContent = 'Start camera'; setUiState(originalImageUrl ? 'result' : 'ready', 'Camera stopped.'); return; }
+            setUiState('loading', 'Starting camera');
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(cameraStream => { stream = cameraStream; videoObj.srcObject = stream; imageUpload.value = ''; cameraToggle.textContent = 'Stop camera'; setUiState('ready', 'Camera ready.'); requestAnimationFrame(sendVideoToServer); }).catch(() => setUiState('error', 'Camera permission was not granted.'));
         }
-        function selectImage() { if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; document.getElementById('cameraToggle').textContent = 'Start camera'; } imageUpload.click(); }
+        function selectImage() { if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; cameraToggle.textContent = 'Start camera'; } imageUpload.click(); }
         function sendData(image, type) {
+            setUiState('loading');
             const reader = new FileReader();
-            reader.onload = () => { const fileData = new Uint8Array(reader.result); const data = new Uint8Array(fileData.length + 1); data[0] = type; data.set(fileData, 1); if (ws.readyState === WebSocket.OPEN) { ws.send(data); clearInterval(sendInterval); sendTimer = 0; sendInterval = setInterval(() => setTimer(100), 100); setStatus('Processing image...'); } };
+            reader.onerror = () => setUiState('error', 'Could not load the image.');
+            reader.onload = () => { const fileData = new Uint8Array(reader.result); const data = new Uint8Array(fileData.length + 1); data[0] = type; data.set(fileData, 1); if (ws.readyState === WebSocket.OPEN) { ws.send(data); clearInterval(sendInterval); sendTimer = 0; sendInterval = setInterval(() => setTimer(100), 100); setUiState('processing'); } else setUiState('error', 'Processor is unavailable.'); };
             reader.readAsArrayBuffer(image);
         }
         function updateImage() {
@@ -202,6 +258,7 @@
         }
         function hideParameters() { document.querySelectorAll('.filter-control input, .filter-control .check-row, .confirm-button').forEach(element => element.classList.add('hidden')); }
         function setFilter(filter) {
+            if (!imageObj.getAttribute('src') && !stream) { setUiState('ready', 'Load an image or start the camera before applying a filter.'); return; }
             hideParameters();
             editingFilterIndex = null;
             if (filter === 'Canny') { document.getElementById('canny1').classList.remove('hidden'); document.getElementById('canny2').classList.remove('hidden'); document.getElementById('canny3').classList.remove('hidden'); }
@@ -296,8 +353,10 @@
             updateViewerAfterFilterChange();
         }
         function sendFilters() {
+            if (!imageObj.getAttribute('src') && !stream) return;
             const data = new Uint8Array(filterState.toPayload(filter => func2byte[filter]));
-            if (ws.readyState === WebSocket.OPEN) ws.send(data);
+            if (ws.readyState === WebSocket.OPEN) { setUiState('processing'); ws.send(data); }
+            else setUiState('error', 'Processor is unavailable.');
         }
         function sendVideoToServer() {
             if (!stream || videoObj.readyState < 2) return;
@@ -305,8 +364,8 @@
             canvas.toBlob(blob => { if (blob) sendData(blob, 2); }, 'image/png');
         }
         const func2byte = { Grayscale: 0, Negative: 1, Otsu: 2, Mean: 3, Median: 4, Canny: 5, Erode: 6, Dilate: 7, Opening: 8, Closing: 9, Histogram: 10, Area: 11, Perimeter: 12, Diameter: 13, Counting: 14, Threshold: 15, Tracking: 16 };
-        document.getElementById('cameraToggle').addEventListener('click', toggleCamera);
-        document.getElementById('imageSelect').addEventListener('click', selectImage);
+        cameraToggle.addEventListener('click', toggleCamera);
+        imageSelect.addEventListener('click', selectImage);
         imageUpload.addEventListener('change', updateImage);
         document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => setFilter(button.dataset.filter)));
         document.getElementById('canny1').addEventListener('change', event => { canny1 = parseInt(event.target.value, 10); });
