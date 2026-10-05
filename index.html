@@ -3,327 +3,238 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trabalho PDI</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Image Workshop | PDI</title>
+    <style>
+        :root {
+            --graphite: #101719;
+            --graphite-soft: #172225;
+            --teal-surface: #1d3435;
+            --teal-raised: #264445;
+            --mint: #9ee8c4;
+            --mint-strong: #6bd4a5;
+            --soft-text: #f1f5ef;
+            --muted-text: #a5b7b1;
+            --coral: #f28c82;
+            --line: #3d5a58;
+            --shadow: rgba(0, 0, 0, 0.22);
+        }
+        * { box-sizing: border-box; }
+        html, body { min-height: 100%; }
+        body { margin: 0; background: var(--graphite); color: var(--soft-text); font-family: "Trebuchet MS", "Gill Sans", sans-serif; }
+        button, input { font: inherit; }
+        button { min-height: 42px; border: 1px solid transparent; border-radius: 6px; padding: 0.65rem 0.8rem; color: var(--soft-text); background: var(--teal-raised); cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
+        button:hover { background: #315553; border-color: var(--mint-strong); }
+        button:active { background: var(--mint-strong); color: var(--graphite); }
+        button:disabled { cursor: not-allowed; opacity: 0.48; }
+        button:focus-visible, input:focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; }
+        .app-shell { width: min(1480px, 100%); min-height: 100svh; margin: 0 auto; padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 1.5rem; display: grid; grid-template-rows: auto minmax(420px, 1fr) auto auto; gap: 1rem; }
+        .app-header { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; align-items: center; gap: 1rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--line); }
+        .brand { display: flex; align-items: center; gap: 0.75rem; }
+        .brand-mark { display: grid; place-items: center; min-width: 52px; min-height: 32px; border: 1px solid var(--mint); border-radius: 4px; color: var(--mint); font-weight: 700; letter-spacing: 0.12em; }
+        h1, h2, h3, p { margin: 0; }
+        h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; }
+        h1 { font-size: clamp(1.2rem, 2vw, 1.65rem); }
+        h2 { font-size: 1.1rem; }
+        h3 { font-size: 0.95rem; color: var(--mint); }
+        #connectionStatus { color: var(--muted-text); font-size: 0.82rem; white-space: nowrap; }
+        #connectionStatus[data-state="error"] { color: var(--coral); }
+        .source-actions { display: flex; gap: 0.5rem; }
+        .source-actions button:first-child { color: var(--graphite); background: var(--mint); }
+        .source-actions button:first-child:hover { background: var(--mint-strong); }
+        .workspace { min-height: 420px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 1rem; }
+        .viewer-panel, .filter-panel, .active-filters { border: 1px solid var(--line); border-radius: 8px; background: var(--graphite-soft); box-shadow: 0 10px 24px var(--shadow); }
+        .viewer-panel { position: relative; min-height: 420px; display: grid; place-items: center; overflow: hidden; }
+        #image { width: 100%; height: 100%; min-height: 420px; object-fit: contain; }
+        .viewer-state { position: absolute; z-index: 1; max-width: 34rem; padding: 1rem; color: var(--muted-text); text-align: center; pointer-events: none; }
+        .filter-panel { padding: 1rem; overflow-y: auto; }
+        #filterGroups { display: grid; gap: 1rem; }
+        .filter-group { display: grid; gap: 0.55rem; }
+        .filter-group + .filter-group { padding-top: 0.9rem; border-top: 1px solid var(--line); }
+        .filter-group-title { color: var(--muted-text); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+        .filter-control { display: grid; gap: 0.35rem; }
+        .filter-control button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+        .filter-control label { color: var(--muted-text); font-size: 0.75rem; }
+        .filter-control input { width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 5px; padding: 0.45rem 0.6rem; color: var(--soft-text); background: var(--teal-surface); }
+        .parameter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .check-row { display: flex; flex-wrap: wrap; gap: 0.55rem 0.9rem; color: var(--muted-text); font-size: 0.8rem; }
+        .check-row label { display: inline-flex; align-items: center; gap: 0.35rem; }
+        .confirm-button { color: var(--graphite); background: var(--mint); }
+        .active-filters { min-height: 112px; padding: 0.9rem 1rem; }
+        .section-heading { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem; }
+        #filterCount { display: inline-grid; place-items: center; min-width: 24px; min-height: 24px; border-radius: 50%; color: var(--graphite); background: var(--mint); font-size: 0.75rem; }
+        #filters { display: flex; gap: 0.6rem; min-height: 54px; overflow-x: auto; padding-bottom: 0.2rem; }
+        .empty-filters { align-self: center; color: var(--muted-text); font-size: 0.85rem; }
+        .active-filter { display: flex; flex: 0 0 auto; align-items: center; gap: 0.7rem; min-width: 170px; max-width: 280px; min-height: 48px; padding: 0.45rem 0.5rem 0.45rem 0.8rem; border: 1px solid var(--line); border-radius: 6px; color: var(--soft-text); background: var(--teal-surface); }
+        .active-filter span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .remove-filter { min-width: 34px; min-height: 34px; padding: 0; color: var(--coral); background: transparent; }
+        .remove-filter:hover { color: var(--soft-text); background: var(--coral); }
+        #statusMessage { min-height: 1.3rem; color: var(--muted-text); font-size: 0.85rem; }
+        #statusMessage[data-state="error"] { color: var(--coral); }
+        .hidden { display: none !important; }
+        @media (max-width: 900px) {
+            .app-shell { grid-template-rows: auto auto auto auto; }
+            .app-header { grid-template-columns: 1fr auto; }
+            #connectionStatus { grid-column: 1 / -1; grid-row: 2; }
+            .source-actions { grid-column: 2; grid-row: 1; }
+            .workspace { grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); }
+        }
+        @media (max-width: 700px) {
+            .app-header { grid-template-columns: 1fr; }
+            .source-actions, #connectionStatus { grid-column: auto; grid-row: auto; }
+            .source-actions { flex-wrap: wrap; }
+            .workspace { grid-template-columns: 1fr; }
+            .viewer-panel, #image { min-height: 320px; }
+            .filter-panel { max-height: 480px; }
+        }
+    </style>
 </head>
 <body>
-    <p id="time" class="absolute top-[8px] text-[#c5c6c7] left-[12px]">0.0s</p>
-    <div class="flex w-[100%] bg-[#0b0c10] h-[100svh]">
-        <div class="flex flex-col w-[80%] px-2">
-            <div id="camera" class="h-[80%] mt-[8px]">
-                <img id="image" class="h-[95%] w-[100%] object-contain border-1 border-[#c5c6c7] rounded-[4px]">
+    <main class="app-shell">
+        <header class="app-header">
+            <div class="brand"><span class="brand-mark">PDI</span><h1>Image Workshop</h1></div>
+            <div id="connectionStatus" role="status" aria-live="polite">Connecting</div>
+            <div class="source-actions" aria-label="Image source">
+                <button id="cameraToggle" type="button">Start camera</button>
+                <button id="imageSelect" type="button">Load image</button>
             </div>
-            <div id="filters" class="overflow-y-auto flex border-1 border-[#c5c6c7] py-2 px-4 rounded-[4px]">
-                <div onclick="toggleCamera()" class="shrink-[0] rounded-[4px] cursor-pointer w-[32px] bg-[#1f2833] h-[128px]">
-                    <p class="[writing-mode:sideways-lr] text-[#c5c6c7] relative top-[64px] translate-y-[-50%] left-[16px] translate-x-[-50%]">Video</p>
+        </header>
+        <section class="workspace" aria-label="Image processing workspace">
+            <section class="viewer-panel" aria-label="Image viewer">
+                <div id="viewerState" class="viewer-state">Load an image or start the camera</div>
+                <img id="image" alt="Processed image preview">
+            </section>
+            <aside class="filter-panel" aria-label="Available filters">
+                <div id="filterGroups">
+                    <section class="filter-group" aria-labelledby="basic-title">
+                        <h2 id="basic-title" class="filter-group-title">Basic adjustments</h2>
+                        <div class="filter-control"><button type="button" data-filter="Grayscale">Grayscale</button></div>
+                        <div class="filter-control"><button type="button" data-filter="Negative">Negative</button></div>
+                        <div class="filter-control"><button type="button" data-filter="Threshold">Threshold</button><label for="kernelThreshold">Threshold value</label><input type="number" id="kernelThreshold" min="0" max="255" value="128" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Otsu">Otsu</button></div>
+                    </section>
+                    <section class="filter-group" aria-labelledby="edges-title">
+                        <h2 id="edges-title" class="filter-group-title">Edges and smoothing</h2>
+                        <div class="filter-control"><button type="button" data-filter="Mean">Mean smoothing</button><label for="kernelMean">Kernel size</label><input type="number" id="kernelMean" min="2" max="100" value="3" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Median">Median smoothing</button><label for="kernelMedian">Kernel size</label><input type="number" id="kernelMedian" min="2" max="100" value="3" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Canny">Canny</button><div class="parameter-row"><div><label for="canny1">Lower threshold</label><input type="number" id="canny1" min="0" max="255" value="5" class="hidden"></div><div><label for="canny2">Upper threshold</label><input type="number" id="canny2" min="0" max="255" value="50" class="hidden"></div></div><button id="canny3" type="button" class="confirm-button hidden">Apply Canny</button></div>
+                    </section>
+                    <section class="filter-group" aria-labelledby="morphology-title">
+                        <h2 id="morphology-title" class="filter-group-title">Morphology</h2>
+                        <div class="filter-control"><button type="button" data-filter="Erode">Erode</button><label for="kernelErode">Kernel size</label><input type="number" id="kernelErode" min="2" max="100" value="3" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Dilate">Dilate</button><label for="kernelDilate">Kernel size</label><input type="number" id="kernelDilate" min="2" max="100" value="3" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Opening">Opening</button><label for="kernelOpening">Kernel size</label><input type="number" id="kernelOpening" min="2" max="100" value="3" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Closing">Closing</button><label for="kernelClosing">Kernel size</label><input type="number" id="kernelClosing" min="2" max="100" value="3" class="hidden"></div>
+                    </section>
+                    <section class="filter-group" aria-labelledby="measurements-title">
+                        <h2 id="measurements-title" class="filter-group-title">Measurements</h2>
+                        <div class="filter-control"><button type="button" data-filter="Histogram">Histogram</button><div id="hist" class="check-row hidden"><label><input type="checkbox" id="hist1"> Cumulative</label><label><input type="checkbox" id="hist2"> Normalized</label></div><button id="hist3" type="button" class="confirm-button hidden">Apply histogram</button></div>
+                        <div class="filter-control"><button type="button" data-filter="Area">Area</button><label for="kernelArea">Pixel size</label><input type="number" id="kernelArea" min="0" max="255" value="0" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Perimeter">Perimeter</button><label for="kernelPerimeter">Pixel size</label><input type="number" id="kernelPerimeter" min="0" max="255" value="0" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Diameter">Diameter</button><label for="kernelDiameter">Pixel size</label><input type="number" id="kernelDiameter" min="0" max="255" value="0" class="hidden"></div>
+                        <div class="filter-control"><button type="button" data-filter="Counting">Object counting</button></div>
+                    </section>
+                    <section class="filter-group" aria-labelledby="tracking-title">
+                        <h2 id="tracking-title" class="filter-group-title">Tracking</h2>
+                        <div class="filter-control"><button type="button" data-filter="Tracking">Object tracking</button></div>
+                    </section>
                 </div>
-                <div onclick="selectImage()" class="shrink-[0] rounded-[4px] cursor-pointer w-[32px] bg-[#1f2833] h-[128px] ml-[8px] mr-[8px]">
-                    <p class="[writing-mode:sideways-lr] text-[#c5c6c7] relative top-[64px] translate-y-[-50%] left-[16px] translate-x-[-50%]">Image</p>
-                </div>
-            </div>
-        </div>
-        <div class="flex flex-col justify-center items-center w-[20%]">
-            <button onclick="setFilter('Grayscale')" class="cursor-pointer outline-0 w-[196px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Grayscale</button>
-            <button onclick="setFilter('Negative')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Negative</button>
-            <button onclick="setFilter('Threshold')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Threshold</button>
-            <input type="number" id="kernelThreshold" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Threshold" min="0" max="255">
-            <button onclick="setFilter('Otsu')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Otsu</button>
-            <button onclick="setFilter('Mean')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Mean Smoothing</button>
-            <input type="number" id="kernelMean" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Kernel" min="2" max="100">
-            <button onclick="setFilter('Median')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Median Smoothing</button>
-            <input type="number" id="kernelMedian" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Kernel" min="2" max="100">
-            <button onclick="setFilter('Canny')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Canny</button>
-            <input type="number" id="canny1" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Threshold 1" min="0" max="255">
-            <input type="number" id="canny2" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Threshold 2" min="0" max="255">
-            <button id="canny3" onclick="addFilter('Canny', [canny1, canny2])" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833] hidden">Confirm</button>
-            <button onclick="setFilter('Erode')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Erode</button>
-            <input type="number" id="kernelErode" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Kernel" min="2" max="100">
-            <button onclick="setFilter('Dilate')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Dilate</button>
-            <input type="number" id="kernelDilate" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Kernel" min="2" max="100">
-            <button onclick="setFilter('Opening')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Opening</button>
-            <input type="number" id="kernelOpening" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Kernel" min="2" max="100">
-            <button onclick="setFilter('Closing')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Closing</button>
-            <input type="number" id="kernelClosing" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Kernel" min="2" max="100">
-            <button onclick="setFilter('Histogram')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-1 text-[#c5c6c7] bg-[#1f2833]">Histogram</button>
-            <div id="hist" class="hidden">
-                <input type="checkbox" id="hist1"><label for="hist1" class="text-[#c5c6c7] ml-[4px]">Cumulative</label>
-                <input type="checkbox" id="hist2"><label for="hist2" class="text-[#c5c6c7] ml-[4px]">Normalized</label>
-            </div>
-            <button id="hist3" onclick="addFilter('Histogram', [hist1, hist2])" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-2 text-[#c5c6c7] bg-[#1f2833] hidden">Confirm</button>
-            <button onclick="setFilter('Area')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-2 text-[#c5c6c7] bg-[#1f2833]">Area</button>
-            <input type="number" id="kernelArea" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Pixel Size" min="0" max="255">
-            <button onclick="setFilter('Perimeter')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-2 text-[#c5c6c7] bg-[#1f2833]">Perimeter</button>
-            <input type="number" id="kernelPerimeter" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Pixel Size" min="0" max="255">
-            <button onclick="setFilter('Diameter')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-2 text-[#c5c6c7] bg-[#1f2833]">Diameter</button>
-            <input type="number" id="kernelDiameter" class="outline-0 margin-0 w-[196px] mt-[8px] bg-[#1f2833] text-[#c5c6c7] text-right rounded-[4px] hidden" placeholder="Pixel Size" min="0" max="255">
-            <button onclick="setFilter('Counting')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-2 text-[#c5c6c7] bg-[#1f2833]">Object Counting</button>
-            <button onclick="setFilter('Tracking')" class="cursor-pointer outline-0 w-[196px] mt-[8px] rounded-[4px] px-4 py-2 text-[#c5c6c7] bg-[#1f2833]">Object Tracking</button>
-        </div>
-    </div>
+            </aside>
+        </section>
+        <section class="active-filters" aria-labelledby="activeFiltersTitle">
+            <div class="section-heading"><h2 id="activeFiltersTitle">Applied filters</h2><span id="filterCount">0</span></div>
+            <div id="filters" role="list" aria-live="polite"><p class="empty-filters">No filters applied</p></div>
+        </section>
+        <p id="statusMessage" role="status" aria-live="polite"></p>
+    </main>
     <input type="file" id="imageUpload" class="hidden" accept="image/*">
+    <canvas id="captureCanvas" class="hidden"></canvas>
+    <video id="cameraVideo" class="hidden" autoplay muted></video>
 
-    <script>
-        var canny1 = 5;
-        var canny2 = 50;
-        var hist1 = false;
-        var hist2 = false;
-        var filters = [];
+    <script type="module">
+        import { createFilterState, formatFilterLabel } from './ui-state.mjs';
 
-        var imageUpload = document.getElementById("imageUpload");
+        const filterState = createFilterState();
+        let canny1 = 5;
+        let canny2 = 50;
+        let hist1 = false;
+        let hist2 = false;
+        let filters = [];
+        const imageUpload = document.getElementById('imageUpload');
+        const imageObj = document.getElementById('image');
+        const videoObj = document.getElementById('cameraVideo');
+        const canvas = document.getElementById('captureCanvas');
+        const ctx = canvas.getContext('2d');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const viewerState = document.getElementById('viewerState');
+        const statusMessage = document.getElementById('statusMessage');
+        let stream = null;
+        let sendInterval = null;
+        let sendTimer = 0;
 
-        imageUpload.addEventListener('change', updateImage);
-        document.getElementById("kernelMean").addEventListener('change', (e) => {addFilter("Mean", [parseInt(e.target.value)])});
-        document.getElementById("kernelMedian").addEventListener('change', (e) => {addFilter("Median", [parseInt(e.target.value)])});
-        document.getElementById("kernelErode").addEventListener('change', (e) => {addFilter("Erode", [parseInt(e.target.value)])});
-        document.getElementById("kernelDilate").addEventListener('change', (e) => {addFilter("Dilate", [parseInt(e.target.value)])});
-        document.getElementById("kernelOpening").addEventListener('change', (e) => {addFilter("Opening", [parseInt(e.target.value)])});
-        document.getElementById("kernelClosing").addEventListener('change', (e) => {addFilter("Closing", [parseInt(e.target.value)])});
-        document.getElementById("kernelArea").addEventListener('change', (e) => {addFilter("Area", [parseInt(e.target.value)])});
-        document.getElementById("kernelPerimeter").addEventListener('change', (e) => {addFilter("Perimeter", [parseInt(e.target.value)])});
-        document.getElementById("kernelDiameter").addEventListener('change', (e) => {addFilter("Diameter", [parseInt(e.target.value)])});
-        document.getElementById("kernelThreshold").addEventListener('change', (e) => {addFilter("Threshold", [parseInt(e.target.value)])});
-        document.getElementById("canny1").addEventListener('change', (e) => {canny1 = parseInt(e.target.value)});
-        document.getElementById("canny2").addEventListener('change', (e) => {canny2 = parseInt(e.target.value)});
-        document.getElementById("hist1").addEventListener('change', (e) => {hist1 = e.target.checked});
-        document.getElementById("hist2").addEventListener('change', (e) => {hist2 = e.target.checked});
+        function setStatus(message, state = '') { statusMessage.textContent = message; statusMessage.dataset.state = state; }
+        function setTimer(ms) { sendTimer += ms / 1000; }
 
-        var ws = new WebSocket("ws:localhost:8080");
-        ws.addEventListener("message", (data) => {
-            imageObj.src = URL.createObjectURL(data.data);
-            clearInterval(sendInterval);
-            sendInterval = null;
-            if(stream){
-                requestAnimationFrame(sendVideoToServer);
-            }
-        });
-        ws.addEventListener("open", () => {
-            ws.send(new Uint8Array([0]));
-        });
-        var videoInterval = null;
-        var sendInterval = null;
-        var sendTimer = 0;
-        var pTimer = document.getElementById("time");
+        const ws = new WebSocket('ws:localhost:8080');
+        ws.addEventListener('open', () => { connectionStatus.textContent = 'Connected'; connectionStatus.dataset.state = 'ready'; ws.send(new Uint8Array([0])); setStatus('Ready for an image.'); });
+        ws.addEventListener('close', () => { connectionStatus.textContent = 'Disconnected'; connectionStatus.dataset.state = 'error'; setStatus('Connection lost. Restart the server and try again.', 'error'); });
+        ws.addEventListener('error', () => { connectionStatus.textContent = 'Connection error'; connectionStatus.dataset.state = 'error'; setStatus('Could not connect to the image processor.', 'error'); });
+        ws.addEventListener('message', event => { imageObj.src = URL.createObjectURL(event.data); viewerState.classList.add('hidden'); clearInterval(sendInterval); sendInterval = null; setStatus('Result updated.'); if (stream) requestAnimationFrame(sendVideoToServer); });
 
-        function setTimer(ms){
-            sendTimer += ms/1000;
-            pTimer.innerText = (Math.round(sendTimer * 100) / 100).toFixed(1);
-            pTimer.innerText += "s";
+        function toggleCamera() {
+            if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; document.getElementById('cameraToggle').textContent = 'Start camera'; setStatus('Camera stopped.'); return; }
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(cameraStream => { stream = cameraStream; videoObj.srcObject = stream; imageUpload.value = ''; document.getElementById('cameraToggle').textContent = 'Stop camera'; setStatus('Camera active.'); requestAnimationFrame(sendVideoToServer); }).catch(() => setStatus('Camera permission was not granted.', 'error'));
         }
-
-        var stream = null;
-        var videoObj = document.createElement("video");
-        videoObj.setAttribute("autoplay", true);
-        videoObj.setAttribute("muted", true);
-        var imageObj = document.getElementById("image");
-        async function toggleCamera(){
-            if(stream){
-                stream.getTracks().forEach(track => track.stop());
-                videoObj.srcObject = null;
-                stream = null;
-
-                clearInterval(videoInterval);
-                videoInterval = null;
-            }else{
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                    videoObj.srcObject = stream;
-
-                    imageUpload.value = '';
-                    
-                    requestAnimationFrame(sendVideoToServer);
-                } catch (err) {
-                    console.error('Error starting camera:', err);
-                }
-            }
-        }
-
-        function selectImage(){
-            if(stream){
-                stream.getTracks().forEach(track => track.stop());
-                videoObj.srcObject = null;
-                stream = null;
-
-                clearInterval(videoInterval);
-                videoInterval = null;
-            }
-            document.getElementById('imageUpload').click();
-        }
-
-        function sendData(image, type){
+        function selectImage() { if (stream) { stream.getTracks().forEach(track => track.stop()); videoObj.srcObject = null; stream = null; document.getElementById('cameraToggle').textContent = 'Start camera'; } imageUpload.click(); }
+        function sendData(image, type) {
             const reader = new FileReader();
-            reader.onload = () => {
-                const fileData = new Uint8Array(reader.result);
-                const data = new Uint8Array(fileData.length + 1);
-                data[0] = type;
-                data.set(fileData, 1);
-
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(data);
-
-                    clearInterval(sendInterval);
-                    sendTimer = 0;
-                    sendInterval = setInterval(() => setTimer(100), 100);
-                }
-            }
+            reader.onload = () => { const fileData = new Uint8Array(reader.result); const data = new Uint8Array(fileData.length + 1); data[0] = type; data.set(fileData, 1); if (ws.readyState === WebSocket.OPEN) { ws.send(data); clearInterval(sendInterval); sendTimer = 0; sendInterval = setInterval(() => setTimer(100), 100); setStatus('Processing image...'); } };
             reader.readAsArrayBuffer(image);
         }
-
-        function updateImage(){
-            let files = imageUpload.files;
-            if(files.length > 0){
-                sendData(files[0], 1);
-            }
+        function updateImage() { if (imageUpload.files.length > 0) sendData(imageUpload.files[0], 1); }
+        function hideParameters() { document.querySelectorAll('.filter-control input, .filter-control .check-row, .confirm-button').forEach(element => element.classList.add('hidden')); }
+        function setFilter(filter) {
+            hideParameters();
+            if (filter === 'Canny') { document.getElementById('canny1').classList.remove('hidden'); document.getElementById('canny2').classList.remove('hidden'); document.getElementById('canny3').classList.remove('hidden'); }
+            else if (filter === 'Histogram') { document.getElementById('hist').classList.remove('hidden'); document.getElementById('hist3').classList.remove('hidden'); }
+            else if (['Mean', 'Median', 'Erode', 'Dilate', 'Opening', 'Closing', 'Area', 'Perimeter', 'Diameter', 'Threshold'].includes(filter)) document.getElementById(`kernel${filter}`).classList.remove('hidden');
+            else addFilter(filter, [0, 0]);
         }
-
-        function loadFilter(e, idx){
-            e.preventDefault();
-            if(e.button == 1 || (e.button == 0 && e.shiftKey)){
-                filters[idx] = null;
-                if(e.target.tagName == 'P'){
-                    e.target.parentElement.remove();
-                }else{
-                    e.target.remove();
-                }
-                if(document.getElementById("filters").children.length == 2){
-                    filters = [];
-                }
-                sendFilters();
-            }else{
-                hide();
-                if(["Mean", "Median", "Canny", "Erode", "Dilate", "Opening", "Closing", "Area", "Perimeter", "Diameter", "Histogram", "Threshold"].indexOf(filters[idx][0]) > -1){
-                    if(filters[idx][0] == "Canny"){
-                        let canny1Obj = document.getElementById("canny1");
-                        let canny2Obj = document.getElementById("canny2");
-                        canny1Obj.classList.remove("hidden");
-                        canny2Obj.classList.remove("hidden");
-                        document.getElementById("canny3").classList.remove("hidden");
-                        canny1Obj.value = `${filters[idx][1][0]}`;
-                        canny2Obj.value = `${filters[idx][1][1]}`;
-                    }else if(filters[idx][0] == "Histogram"){
-                        document.getElementById("hist").classList.remove("hidden");
-                        document.getElementById("hist3").classList.remove("hidden");
-                        document.getElementById("hist1").checked = filters[idx][1][0];
-                        document.getElementById("hist2").checked = filters[idx][1][1];
-                    }else{
-                        document.getElementById(`kernel${filters[idx][0]}`).classList.remove("hidden");
-                        document.getElementById(`kernel${filters[idx][0]}`).value = `${filters[idx][1][0]}`;
-                    }
-                }
-            }
+        function addFilter(filter, values) { filters.push([filter, values]); filterState.addFilter(filter, values); renderActiveFilters(); sendFilters(); }
+        function renderActiveFilters() {
+            const rail = document.getElementById('filters');
+            rail.replaceChildren();
+            document.getElementById('filterCount').textContent = filters.length;
+            if (filters.length === 0) { const empty = document.createElement('p'); empty.className = 'empty-filters'; empty.textContent = 'No filters applied'; rail.appendChild(empty); return; }
+            filters.forEach(([name, values]) => { const item = document.createElement('div'); item.className = 'active-filter'; item.setAttribute('role', 'listitem'); const label = document.createElement('span'); label.textContent = formatFilterLabel({ name, values }); item.appendChild(label); rail.appendChild(item); });
         }
-
-        function addFilter(filter, values){
-            let div = document.createElement('div');
-            let p = document.createElement('p');
-            div.setAttribute('class', "shrink-[0] rounded-[4px] cursor-pointer w-[32px] bg-[#1f2833] h-[128px] ml-[8px]");
-            p.setAttribute('class', "[writing-mode:sideways-lr] text-[#c5c6c7] relative top-[64px] translate-y-[-50%] left-[16px] translate-x-[-50%]");
-            p.innerText = filter;
-            div.appendChild(p);
-            let size = filters.length;
-            div.onclick = function(e){loadFilter(e, size);};
-            filters.push([filter, values])
-            sendFilters();
-            document.getElementById("filters").appendChild(div);
+        function sendFilters() {
+            const data = new Uint8Array(filters.length * 3 + 1); let index = 1; data[0] = 0;
+            filters.forEach(([filter, values]) => { data[index] = func2byte[filter]; data[index + 1] = values[0] ?? 0; data[index + 2] = values[1] ?? 0; index += 3; });
+            if (ws.readyState === WebSocket.OPEN) ws.send(data);
         }
-
-        function hide(){
-            document.getElementById("kernelMean").classList.add("hidden");
-            document.getElementById("kernelMedian").classList.add("hidden");
-            document.getElementById("kernelErode").classList.add("hidden");
-            document.getElementById("kernelDilate").classList.add("hidden");
-            document.getElementById("kernelOpening").classList.add("hidden");
-            document.getElementById("kernelClosing").classList.add("hidden");
-            document.getElementById("kernelArea").classList.add("hidden");
-            document.getElementById("kernelPerimeter").classList.add("hidden");
-            document.getElementById("kernelDiameter").classList.add("hidden");
-            document.getElementById("kernelThreshold").classList.add("hidden");
-            document.getElementById("canny1").classList.add("hidden");
-            document.getElementById("canny2").classList.add("hidden");
-            document.getElementById("canny3").classList.add("hidden");
-            document.getElementById("hist").classList.add("hidden");
-            document.getElementById("hist3").classList.add("hidden");
+        function sendVideoToServer() {
+            if (!stream || videoObj.readyState < 2) return;
+            canvas.width = videoObj.videoWidth; canvas.height = videoObj.videoHeight; ctx.drawImage(videoObj, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => { if (blob) sendData(blob, 2); }, 'image/png');
         }
-
-        function setFilter(filter){
-            hide();
-            if(["Mean", "Median", "Canny", "Erode", "Dilate", "Opening", "Closing", "Area", "Perimeter", "Diameter", "Histogram", "Threshold"].indexOf(filter) > -1){
-                if(filter == "Canny"){
-                    document.getElementById("canny1").classList.remove("hidden");
-                    document.getElementById("canny2").classList.remove("hidden");
-                    document.getElementById("canny3").classList.remove("hidden");
-                }else if(filter == "Histogram"){
-                    document.getElementById("hist3").classList.remove("hidden");
-                    document.getElementById("hist").classList.remove("hidden");
-                }else{
-                    document.getElementById(`kernel${filter}`).classList.remove("hidden");
-                }
-            }else{
-                addFilter(filter, [0, 0]);
-            }
-        }
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        function sendVideoToServer(){
-            ctx.drawImage(videoObj, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob(blob => {
-                if (!blob) return;
-                sendData(blob, 2);
-            }, 'image/png');
-            // if(stream){
-            //     requestAnimationFrame(sendVideoToServer);
-            // }
-        }
-
-        var func2byte = {
-            "Grayscale": 0,
-            "Negative": 1,
-            "Otsu": 2,
-            "Mean": 3,
-            "Median": 4,
-            "Canny": 5,
-            "Erode": 6,
-            "Dilate": 7,
-            "Opening": 8,
-            "Closing": 9,
-            "Histogram": 10,
-            "Area": 11,
-            "Perimeter": 12,
-            "Diameter": 13,
-            "Counting": 14,
-            "Threshold": 15,
-            "Tracking": 16
-        };
-        function sendFilters(){
-            let filtersWithoutNone = [];
-            filters.forEach(element => {
-                if(element != null){
-                    filtersWithoutNone.push(element);
-                }
-            });
-            let data = new Uint8Array(filtersWithoutNone.length*3 + 1);
-            let idx = 1;
-            data[0] = 0;
-            filtersWithoutNone.forEach(element => {
-                data[idx] = func2byte[element[0]];
-                if(data[idx] == 10){
-                    data[idx+1] = (element[1][0]) ? 1 : 0;
-                    data[idx+2] = (element[1][1]) ? 1 : 0;
-                }else{
-                    data[idx+1] = element[1][0];
-                    data[idx+2] = element[1][1];
-                }
-                idx += 3;
-            });
-            if(ws.readyState == WebSocket.OPEN){
-                ws.send(data);
-                if(imageUpload.files.length > 0){
-                    clearInterval(sendInterval);
-                    sendTimer = 0;
-                    sendInterval = setInterval(() => setTimer(100), 100);
-                }
-            }
-        }
+        const func2byte = { Grayscale: 0, Negative: 1, Otsu: 2, Mean: 3, Median: 4, Canny: 5, Erode: 6, Dilate: 7, Opening: 8, Closing: 9, Histogram: 10, Area: 11, Perimeter: 12, Diameter: 13, Counting: 14, Threshold: 15, Tracking: 16 };
+        document.getElementById('cameraToggle').addEventListener('click', toggleCamera);
+        document.getElementById('imageSelect').addEventListener('click', selectImage);
+        imageUpload.addEventListener('change', updateImage);
+        document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => setFilter(button.dataset.filter)));
+        document.getElementById('canny1').addEventListener('change', event => { canny1 = parseInt(event.target.value, 10); });
+        document.getElementById('canny2').addEventListener('change', event => { canny2 = parseInt(event.target.value, 10); });
+        document.getElementById('hist1').addEventListener('change', event => { hist1 = event.target.checked; });
+        document.getElementById('hist2').addEventListener('change', event => { hist2 = event.target.checked; });
+        document.getElementById('canny3').addEventListener('click', () => addFilter('Canny', [canny1, canny2]));
+        document.getElementById('hist3').addEventListener('click', () => addFilter('Histogram', [hist1, hist2]));
+        document.querySelectorAll('input[type="number"]').forEach(input => input.addEventListener('change', event => { if (!event.target.value) return; const filter = event.target.id.replace('kernel', ''); if (func2byte[filter] !== undefined) addFilter(filter, [parseInt(event.target.value, 10)]); }));
     </script>
 </body>
-</html>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trabalho PDI</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
