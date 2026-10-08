@@ -79,6 +79,12 @@ def processVideo(img, previous_detections=None, return_detections=False, detecto
             img = functionsVideo[filter_idx](img, norm=(p2 == 1), cum=(p1 == 1))
         elif filter_idx == 16:
             img, detections = functionsVideo[filter_idx](img, previous_detections, detector)
+        elif filter_idx == 14:
+            res = functionsVideo[filter_idx](img, detector)
+            if isinstance(res, tuple):
+                img, detections = res
+            else:
+                img = res
         elif (3 <= filter_idx <= 13) or filter_idx == 15:
             img = functionsVideo[filter_idx](img, p1)
         else:
@@ -107,15 +113,18 @@ async def handler(websocket):
             setFilters(np.frombuffer(content, np.uint8))
             if imgSet and originalImg is not None:
                 if len(filters) > 0:
-                    if streamType == 1:
-                        img = process(originalImg.copy())
-                    elif streamType == 2:
-                        img, previous_detections = processVideo(
-                            originalImg.copy(), previous_detections, True, video_detector,
-                        )
+                    try:
+                        if streamType == 1:
+                            img = process(originalImg.copy())
+                        elif streamType == 2:
+                            img, previous_detections = processVideo(
+                                originalImg.copy(), previous_detections, True, video_detector,
+                            )
+                    except Exception as e:
+                        print(f"Erro ao aplicar filtros: {e}")
                     _, buffer = cv2.imencode('.png', img)
                     await websocket.send(buffer.tobytes())
-                    if streamType == 2 and any(filter_idx == 16 for filter_idx, _, _ in filters):
+                    if streamType == 2 and any(filter_idx in (14, 16) for filter_idx, _, _ in filters):
                         await websocket.send(json.dumps({
                             'type': 'detections',
                             'objects': previous_detections,
@@ -156,7 +165,7 @@ async def handler(websocket):
                 imgSet = True
                 _, buffer = cv2.imencode('.png', img)
                 await websocket.send(buffer.tobytes())
-                if any(filter_idx == 16 for filter_idx, _, _ in filters):
+                if any(filter_idx in (14, 16) for filter_idx, _, _ in filters):
                     await websocket.send(json.dumps({
                         'type': 'detections',
                         'objects': previous_detections,

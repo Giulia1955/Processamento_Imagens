@@ -231,6 +231,9 @@
                         const objects = Array.isArray(payload.objects) ? payload.objects : [];
                         if (getNewDetectionIds(previousDetectionIds, objects).length > 0) playDetectionAudio();
                         previousDetectionIds = objects.map(object => object.id).filter(Boolean);
+                        const count = objects.length;
+                        const classSummary = objects.map(o => o.class_name || o.id).filter(Boolean).join(', ');
+                        setStatus(count > 0 ? `Detections: ${count} (${classSummary})` : 'No objects detected');
                         return;
                     }
                     message = payload.error || payload.message || event.data;
@@ -316,10 +319,22 @@
             if (!imageObj.getAttribute('src') && !stream) { setUiState('ready', 'Load an image or start the camera before applying a filter.'); return; }
             hideParameters();
             editingFilterIndex = null;
-            if (filter === 'Canny') { document.getElementById('canny1').classList.remove('hidden'); document.getElementById('canny2').classList.remove('hidden'); document.getElementById('canny3').classList.remove('hidden'); }
-            else if (filter === 'Histogram') { document.getElementById('hist').classList.remove('hidden'); document.getElementById('hist3').classList.remove('hidden'); }
-            else if (['Mean', 'Median', 'Erode', 'Dilate', 'Opening', 'Closing', 'Area', 'Perimeter', 'Diameter', 'Threshold'].includes(filter)) document.getElementById(`kernel${filter}`).classList.remove('hidden');
-            else addFilter(filter, [0, 0]);
+            if (filter === 'Canny') {
+                document.getElementById('canny1').classList.remove('hidden');
+                document.getElementById('canny2').classList.remove('hidden');
+                document.getElementById('canny3').classList.remove('hidden');
+            } else if (filter === 'Histogram') {
+                document.getElementById('hist').classList.remove('hidden');
+                document.getElementById('hist3').classList.remove('hidden');
+            } else if (['Mean', 'Median', 'Erode', 'Dilate', 'Opening', 'Closing', 'Area', 'Perimeter', 'Diameter', 'Threshold'].includes(filter)) {
+                const input = document.getElementById(`kernel${filter}`);
+                input.classList.remove('hidden');
+                const defaultVal = ['Area', 'Perimeter', 'Diameter'].includes(filter) ? 1 : (filter === 'Threshold' ? 128 : 3);
+                const val = parseInt(input.value, 10) || defaultVal;
+                addFilter(filter, [val]);
+            } else {
+                addFilter(filter, [0, 0]);
+            }
         }
         function addFilter(filter, values) { filterState.addFilter(filter, values); renderActiveFilters(); sendFilters(); }
         function editFilterAt(index) {
@@ -346,6 +361,7 @@
                 const input = document.getElementById(`kernel${filter.name}`);
                 input.value = filter.values[0] ?? input.value;
                 input.classList.remove('hidden');
+                input.focus();
             }
         }
         function commitFilter(filter, values) {
@@ -409,7 +425,7 @@
         }
         function sendFilters() {
             if (!imageObj.getAttribute('src') && !stream) return;
-            if (!filterState.filters.some(filter => filter.name === 'Tracking')) previousDetectionIds = [];
+            if (!filterState.filters.some(filter => filter.name === 'Tracking' || filter.name === 'Counting')) previousDetectionIds = [];
             const data = new Uint8Array(filterState.toPayload(filter => func2byte[filter]));
             if (ws.readyState === WebSocket.OPEN) { setUiState('processing'); ws.send(data); }
             else setUiState('error', 'Processor is unavailable.');
@@ -444,14 +460,30 @@
         document.getElementById('hist2').addEventListener('change', event => { hist2 = event.target.checked; });
         document.getElementById('canny3').addEventListener('click', () => commitFilter('Canny', [canny1, canny2]));
         document.getElementById('hist3').addEventListener('click', () => commitFilter('Histogram', [hist1, hist2]));
-        document.querySelectorAll('input[type="number"]').forEach(input => input.addEventListener('change', event => {
-            if (!event.target.value) return;
-            const filter = event.target.id.replace('kernel', '');
-            if (func2byte[filter] === undefined) return;
-            const values = [parseInt(event.target.value, 10)];
-            if (editingFilterIndex === null) addFilter(filter, values);
-            else commitFilter(filter, values);
-        }));
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            const handleValue = () => {
+                if (!input.value) return;
+                const filter = input.id.replace('kernel', '');
+                if (func2byte[filter] === undefined) return;
+                const values = [parseInt(input.value, 10)];
+                if (editingFilterIndex === null) {
+                    const lastIdx = filterState.filters.length - 1;
+                    if (lastIdx >= 0 && filterState.filters[lastIdx].name === filter) {
+                        filterState.updateFilter(lastIdx, filter, values);
+                        renderActiveFilters();
+                        sendFilters();
+                    } else {
+                        addFilter(filter, values);
+                    }
+                } else {
+                    commitFilter(filter, values);
+                }
+            };
+            input.addEventListener('change', handleValue);
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') handleValue();
+            });
+        });
     </script>
 </body>
 </html>

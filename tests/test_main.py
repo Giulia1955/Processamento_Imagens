@@ -118,17 +118,51 @@ class ProcessVideoTests(unittest.TestCase):
         self.assertEqual([item['id'] for item in detections], ['object-1', 'object-2'])
         self.assertEqual(len(detections), 2)
 
-    def test_track_video_returns_empty_detections_for_empty_frame(self):
-        class EmptyDetector:
+    def test_video_measurement_filters_work_on_color_frames(self):
+        color_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        color_frame[20:40, 20:40] = (255, 255, 255)
+
+        for operation in (funcs.areaVideo, funcs.perimeterVideo, funcs.diameterVideo):
+            result = operation(color_frame)
+            self.assertEqual(result.shape, color_frame.shape)
+            self.assertEqual(result.dtype, np.uint8)
+
+    def test_process_video_counting_filter_detects_and_returns_objects(self):
+        class FakeDetector:
             def detect(self, frame):
-                return []
+                return [
+                    {'class_name': 'person', 'confidence': 0.95, 'bbox': (5, 5, 20, 30), 'center': (15, 20), 'area': 600},
+                    {'class_name': 'cell phone', 'confidence': 0.88, 'bbox': (40, 40, 10, 15), 'center': (45, 47), 'area': 150},
+                ]
 
-        _, detections = funcs.trackVideo(
-            np.zeros((20, 20, 3), dtype=np.uint8),
-            detector=EmptyDetector(),
-        )
+        frame = np.zeros((80, 80, 3), dtype=np.uint8)
+        main.filters = [[14, 0, 0]]
 
-        self.assertEqual(detections, [])
+        annotated, detections = main.processVideo(frame, return_detections=True, detector=FakeDetector())
+
+        self.assertEqual(annotated.shape, frame.shape)
+        self.assertEqual(len(detections), 2)
+        self.assertEqual([d['class_name'] for d in detections], ['person', 'cell phone'])
+
+    def test_measurement_filters_handle_zero_or_negative_pixel_size(self):
+        image = np.zeros((40, 40), dtype=np.uint8)
+        image[10:20, 10:20] = 255
+
+        for operation in (funcs.area, funcs.perimeter, funcs.diameter):
+            result_zero = operation(image, pixelSize=0)
+            result_neg = operation(image, pixelSize=-5)
+            self.assertEqual(result_zero.shape, (40, 40, 3))
+            self.assertEqual(result_neg.shape, (40, 40, 3))
+
+    def test_extract_components_fast_on_noisy_image(self):
+        import time
+        np.random.seed(42)
+        noise = (np.random.rand(200, 200) > 0.6).astype(np.uint8) * 255
+        start = time.time()
+        comps = funcs.extract_components(noise)
+        duration = time.time() - start
+        self.assertLess(duration, 0.5)
+        self.assertGreater(len(comps), 0)
 
 
 if __name__ == '__main__':

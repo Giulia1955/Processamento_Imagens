@@ -167,26 +167,44 @@ def _binary_mask(img):
         raise ValueError('A imagem deve ter pelo menos duas dimensoes')
     if len(img.shape) > 2:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    return np.where(img != 0, 255, 0).astype(np.uint8)
+    unique_vals = np.unique(img)
+    if len(unique_vals) <= 2 and (0 in unique_vals or 255 in unique_vals):
+        return np.where(img != 0, 255, 0).astype(np.uint8)
+    _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if np.mean(thresh == 255) > 0.5:
+        thresh = cv2.bitwise_not(thresh)
+    return thresh
 
 def extract_components(img):
     binary = _binary_mask(img)
     count, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, 8)
     components = []
-    for label in range(1, count):
-        component_mask = np.where(labels == label, 255, 0).astype(np.uint8)
-        contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        if not contours:
-            continue
-        contour = max(contours, key=cv2.contourArea)
-        _, radius = cv2.minEnclosingCircle(contour)
+    valid_labels = range(1, count)
+    if count > 150:
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        sorted_indices = np.argsort(-areas)[:100]
+        valid_labels = [idx + 1 for idx in sorted_indices]
+
+    for label in valid_labels:
         x = int(stats[label, cv2.CC_STAT_LEFT])
         y = int(stats[label, cv2.CC_STAT_TOP])
         width = int(stats[label, cv2.CC_STAT_WIDTH])
         height = int(stats[label, cv2.CC_STAT_HEIGHT])
+        if width <= 0 or height <= 0:
+            continue
+        sub_labels = labels[y:y+height, x:x+width]
+        sub_mask = np.zeros((height + 2, width + 2), dtype=np.uint8)
+        sub_mask[1:-1, 1:-1] = (sub_labels == label).astype(np.uint8) * 255
+        contours, _ = cv2.findContours(sub_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if not contours:
+            continue
+        contour = max(contours, key=cv2.contourArea)
+        contour[:, 0, 0] += x - 1
+        contour[:, 0, 1] += y - 1
+        _, radius = cv2.minEnclosingCircle(contour)
         components.append({
             'label': label,
-            'mask': component_mask,
+            'mask': sub_mask[1:-1, 1:-1],
             'contour': contour,
             'area': int(stats[label, cv2.CC_STAT_AREA]),
             'perimeter': float(cv2.arcLength(contour, True)),
@@ -196,11 +214,13 @@ def extract_components(img):
         })
     return components
 
-def _annotated_components(img, value_name, pixel_size):
-    if pixel_size <= 0:
-        raise ValueError('pixelSize deve ser maior que zero')
+def _annotated_components(img, value_name, pixel_size=1):
+    pixel_size = float(pixel_size) if (pixel_size is not None and pixel_size > 0) else 1.0
     binary = _binary_mask(img)
-    result = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+    if len(img.shape) > 2 and img.shape[2] == 3:
+        result = img.copy()
+    else:
+        result = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
     for number, component in enumerate(extract_components(binary), start=1):
         x, y, _, _ = component['bbox']
         if value_name == 'number':
@@ -211,15 +231,7 @@ def _annotated_components(img, value_name, pixel_size):
     return result
 
 def areaVideo(img, pixelSize=1):
-    contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    result = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    for contour in contours:
-        area = cv2.contourArea(contour) * pixelSize
-        x, y = contour[0][0]
-        cv2.putText(result, f'{area:.1f}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
-    return result
+    return area(img, pixelSize)
 
 def area(img, pixelSize=1):
     return _annotated_components(img, 'area', pixelSize)
@@ -249,44 +261,21 @@ def neighboors(img, pos):
     return mask.flatten()
 
 def perimeterVideo(img, pixelSize=1):
-    contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    result = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    for contour in contours:
-        perimeter = cv2.arcLength(contour, True) * pixelSize
-        x, y = contour[0][0]
-        cv2.putText(result, f'{perimeter:.1f}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
-    return result
+    return perimeter(img, pixelSize)
 
 def perimeter(img, pixelSize=1):
     return _annotated_components(img, 'perimeter', pixelSize)
 
 def diameterVideo(img, pixelSize=1):
-    contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    result = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    for contour in contours:
-        x, y = contour[0][0]
-        _,radius = cv2.minEnclosingCircle(contour)
-        cv2.putText(result, f'{2*radius*pixelSize:.1f}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
-    return result
+    return diameter(img, pixelSize)
 
 def diameter(img, pixelSize=1):
     return _annotated_components(img, 'diameter', pixelSize)
 
-def objectsVideo(img):
-    contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    result = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    i = 1
-    for contour in contours:
-        x, y = contour[0][0]
-        cv2.putText(result, f'{i}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-        i += 1
-
-    return result
+def objectsVideo(img, detector=None):
+    if detector is not None:
+        return detect_objects(img, detector=detector)
+    return detect_objects(img)
 
 
 def _component_detections(mask, min_area):
@@ -343,8 +332,7 @@ class YoloDetector:
             raise RuntimeError(f'Falha na inferencia YOLO: {error}') from error
 
 def _annotate_detections(img, detections):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) > 2 else img
-    annotated = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    annotated = img.copy() if (len(img.shape) > 2 and img.shape[2] == 3) else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     for detection in detections:
         x, y, width, height = detection['bbox']
         label = f"{detection['class_name']} {detection['confidence']:.2f}"
