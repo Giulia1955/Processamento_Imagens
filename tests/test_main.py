@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 import main
+import funcs
 from funcs import detect_objects, match_detections
 
 
@@ -65,6 +66,27 @@ class ProcessVideoTests(unittest.TestCase):
         _, detections = main.processVideo(frame, return_detections=True)
 
         self.assertEqual(len(detections), 2)
+
+    def test_extract_components_returns_independent_measurements(self):
+        image = np.zeros((80, 100), dtype=np.uint8)
+        image[10:20, 10:20] = 255
+        image[40:60, 60:80] = 255
+
+        components = funcs.extract_components(image)
+
+        self.assertEqual(len(components), 2)
+        self.assertEqual(sorted(item['area'] for item in components), [100, 400])
+        self.assertTrue(all(item['perimeter'] > 0 for item in components))
+        self.assertTrue(all(item['diameter'] > 0 for item in components))
+
+    def test_measurement_filters_return_annotated_bgr_images(self):
+        image = np.zeros((30, 30), dtype=np.uint8)
+        image[5:15, 5:15] = 255
+
+        for operation in (funcs.area, funcs.perimeter, funcs.diameter, funcs.objects):
+            result = operation(image)
+            self.assertEqual(result.shape, (30, 30, 3))
+            self.assertEqual(result.dtype, np.uint8)
 
 
 if __name__ == '__main__':

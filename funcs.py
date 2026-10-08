@@ -161,6 +161,54 @@ def closing(img, kernelSize):
 def insideImg(img, pos):
     return pos[0] >= 0 and pos[0] < img.shape[0] and pos[1] >= 0 and pos[1] < img.shape[1]
 
+def _binary_mask(img):
+    if img is None or not hasattr(img, 'shape') or len(img.shape) < 2:
+        raise ValueError('A imagem deve ter pelo menos duas dimensoes')
+    if len(img.shape) > 2:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    return np.where(img != 0, 255, 0).astype(np.uint8)
+
+def extract_components(img):
+    binary = _binary_mask(img)
+    count, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, 8)
+    components = []
+    for label in range(1, count):
+        component_mask = np.where(labels == label, 255, 0).astype(np.uint8)
+        contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if not contours:
+            continue
+        contour = max(contours, key=cv2.contourArea)
+        _, radius = cv2.minEnclosingCircle(contour)
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        width = int(stats[label, cv2.CC_STAT_WIDTH])
+        height = int(stats[label, cv2.CC_STAT_HEIGHT])
+        components.append({
+            'label': label,
+            'mask': component_mask,
+            'contour': contour,
+            'area': int(stats[label, cv2.CC_STAT_AREA]),
+            'perimeter': float(cv2.arcLength(contour, True)),
+            'diameter': float(radius * 2),
+            'bbox': (x, y, width, height),
+            'center': tuple(float(value) for value in centroids[label]),
+        })
+    return components
+
+def _annotated_components(img, value_name, pixel_size):
+    if pixel_size <= 0:
+        raise ValueError('pixelSize deve ser maior que zero')
+    binary = _binary_mask(img)
+    result = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+    for number, component in enumerate(extract_components(binary), start=1):
+        x, y, _, _ = component['bbox']
+        if value_name == 'number':
+            text = str(number)
+        else:
+            text = f'{component[value_name] * pixel_size:.1f}'
+        cv2.putText(result, text, (x, max(y + 15, 15)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    return result
+
 def areaVideo(img, pixelSize=1):
     contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
@@ -173,27 +221,7 @@ def areaVideo(img, pixelSize=1):
     return result
 
 def area(img, pixelSize=1):
-    poss = []
-    mask = np.zeros((img.shape[0], img.shape[1], 3), np.uint8)
-    for row in range(img.shape[0]):
-        for col in range(img.shape[1]):
-            if img[row, col] != 0 and mask[row, col, 1] == 0:
-                seed = (row, col)
-                count = 0
-                q = [seed]
-                while(len(q) > 0):
-                    pos = q.pop(0)
-                    if insideImg(img, pos) and img[pos[0], pos[1]] != 0 and mask[pos[0], pos[1], 1] == 0:
-                        mask[pos[0], pos[1]] = [255, 255, 255]
-                        count += 1
-                        q.append((pos[0],   pos[1]+1))
-                        q.append((pos[0],   pos[1]-1))
-                        q.append((pos[0]+1, pos[1]))
-                        q.append((pos[0]-1, pos[1]))
-                poss.append((row, col, (count)*pixelSize))
-    for pos in poss:
-        mask = cv2.putText(mask, f'{pos[2]}', (pos[1], pos[0]+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color=(0, 0, 255))
-    return mask
+    return _annotated_components(img, 'area', pixelSize)
 
 def neighboors(img, pos):
     mask = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]], np.uint8)
@@ -231,28 +259,7 @@ def perimeterVideo(img, pixelSize=1):
     return result
 
 def perimeter(img, pixelSize=1):
-    poss = []
-    mask = np.zeros((img.shape[0], img.shape[1], 3))
-    for row in range(img.shape[0]):
-        for col in range(img.shape[1]):
-            if img[row, col] != 0 and mask[row, col, 0] == 0:
-                seed = (row, col)
-                count = 0
-                q = [seed]
-                while(len(q) > 0):
-                    pos = q.pop(0)
-                    if insideImg(img, pos) and img[pos[0], pos[1]] != 0 and mask[pos[0], pos[1], 0] == 0:
-                        mask[pos[0], pos[1]] = [255, 255, 255]
-                        if any([pixel == 0 for pixel in neighboors(img, pos)]):
-                            count += 1
-                        q.append((pos[0],   pos[1]+1))
-                        q.append((pos[0],   pos[1]-1))
-                        q.append((pos[0]+1, pos[1]))
-                        q.append((pos[0]-1, pos[1]))
-                poss.append((row, col, count*pixelSize))
-    for pos in poss:
-        mask = cv2.putText(mask, f'{pos[2]}', (pos[1], pos[0]+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color=(0, 0, 255))
-    return mask
+    return _annotated_components(img, 'perimeter', pixelSize)
 
 def diameterVideo(img, pixelSize=1):
     contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -266,37 +273,7 @@ def diameterVideo(img, pixelSize=1):
     return result
 
 def diameter(img, pixelSize=1):
-    mask = np.zeros((img.shape[0], img.shape[1], 3))
-    borders = []
-    diameters = []
-    textPos = []
-    for row in range(img.shape[0]):
-        for col in range(img.shape[1]):
-            if img[row, col] != 0 and mask[row, col, 0] == 0:
-                seed = (row, col)
-                q = [seed]
-                border = []
-                while(len(q) > 0):
-                    pos = q.pop(0)
-                    if insideImg(img, pos) and img[pos[0], pos[1]] != 0 and mask[pos[0], pos[1], 0] == 0:
-                        mask[pos[0], pos[1]] = [255, 255, 255]
-                        if any([pixel == 0 for pixel in neighboors(img, pos)]):
-                            border.append(pos)
-                        q.append((pos[0],   pos[1]+1))
-                        q.append((pos[0],   pos[1]-1))
-                        q.append((pos[0]+1, pos[1]))
-                        q.append((pos[0]-1, pos[1]))
-                borders.append(border)
-                textPos.append((row, col))
-    for border in borders:
-        maxDiameter = 0
-        for i in range(len(border)):
-            for j in range(i, len(border)):
-                maxDiameter = max(maxDiameter, pixelSize*np.sqrt((border[i][0]-border[j][0])**2 + (border[i][1]-border[j][1])**2))
-        diameters.append(maxDiameter)
-    for i, diameter in enumerate(diameters):
-        mask = cv2.putText(mask, f'{diameter:.1f}', (textPos[i][1], textPos[i][0]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color=(0, 0, 255))
-    return mask
+    return _annotated_components(img, 'diameter', pixelSize)
 
 def objectsVideo(img):
     contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -375,27 +352,7 @@ def match_detections(previous, current, max_distance=80):
     return matched
 
 def objects(img):
-    count = 0
-    poss = []
-    mask = np.zeros((img.shape[0], img.shape[1], 3))
-    for row in range(img.shape[0]):
-        for col in range(img.shape[1]):
-            if img[row, col] != 0 and mask[row, col, 0] == 0:
-                seed = (row, col)
-                count += 1
-                q = [seed]
-                while(len(q) > 0):
-                    pos = q.pop(0)
-                    if insideImg(img, pos) and img[pos[0], pos[1]] != 0 and mask[pos[0], pos[1], 0] == 0:
-                        mask[pos[0], pos[1]] = [255, 255, 255]
-                        q.append((pos[0],   pos[1]+1))
-                        q.append((pos[0],   pos[1]-1))
-                        q.append((pos[0]+1, pos[1]))
-                        q.append((pos[0]-1, pos[1]))
-                poss.append((row, col, count))
-    for pos in poss:
-        mask = cv2.putText(mask, f'{pos[2]}', (pos[1], pos[0]+15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color=(0, 0, 255))
-    return mask
+    return _annotated_components(img, 'number', 1)
 
 
 def trackVideo(img, previous_detections=None):
