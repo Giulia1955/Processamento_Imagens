@@ -88,6 +88,21 @@ class ProcessVideoTests(unittest.TestCase):
             self.assertEqual(result.shape, (30, 30, 3))
             self.assertEqual(result.dtype, np.uint8)
 
+    def test_detect_objects_annotates_and_counts_detector_results(self):
+        class FakeDetector:
+            def detect(self, frame):
+                return [
+                    {'class_name': 'person', 'confidence': 0.91, 'bbox': (2, 3, 10, 20), 'center': (7, 13)},
+                    {'class_name': 'cell phone', 'confidence': 0.84, 'bbox': (30, 10, 8, 12), 'center': (34, 16)},
+                ]
+
+        frame = np.zeros((50, 60, 3), dtype=np.uint8)
+        annotated, detections = detect_objects(frame, detector=FakeDetector())
+
+        self.assertEqual(annotated.shape, frame.shape)
+        self.assertEqual([item['class_name'] for item in detections], ['person', 'cell phone'])
+        self.assertEqual(len(detections), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

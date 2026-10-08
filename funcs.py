@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import time
+import os
 
 #
 def escala_cinza(img):
@@ -308,7 +309,54 @@ def _component_detections(mask, min_area):
     return detections
 
 
-def detect_objects(img, min_area=400):
+class YoloDetector:
+    def __init__(self, model_path=None, confidence=0.25):
+        self.model_path = model_path or os.environ.get('YOLO_MODEL_PATH', 'yolo11n.pt')
+        self.confidence = confidence
+        self._model = None
+
+    def detect(self, frame):
+        if self._model is None:
+            try:
+                from ultralytics import YOLO
+                self._model = YOLO(self.model_path)
+            except Exception as error:
+                raise RuntimeError(f'Nao foi possivel carregar o modelo YOLO: {error}') from error
+        try:
+            result = self._model(frame, conf=self.confidence, verbose=False)[0]
+            names = result.names
+            detections = []
+            for box in result.boxes:
+                coordinates = box.xyxy[0].tolist()
+                x1, y1, x2, y2 = (int(value) for value in coordinates)
+                confidence = float(box.conf[0])
+                class_id = int(box.cls[0])
+                detections.append({
+                    'class_name': names[class_id],
+                    'confidence': confidence,
+                    'bbox': (x1, y1, x2 - x1, y2 - y1),
+                    'center': ((x1 + x2) / 2, (y1 + y2) / 2),
+                    'area': max(0, x2 - x1) * max(0, y2 - y1),
+                })
+            return detections
+        except Exception as error:
+            raise RuntimeError(f'Falha na inferencia YOLO: {error}') from error
+
+def _annotate_detections(img, detections):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) > 2 else img
+    annotated = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    for detection in detections:
+        x, y, width, height = detection['bbox']
+        label = f"{detection['class_name']} {detection['confidence']:.2f}"
+        cv2.rectangle(annotated, (x, y), (x + width, y + height), (0, 255, 0), 2)
+        cv2.putText(annotated, label, (x, max(y - 6, 15)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1)
+    cv2.putText(annotated, f'Objetos: {len(detections)}', (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    return annotated
+
+def detect_objects(img, min_area=400, detector=None):
+    if detector is not None:
+        detections = detector.detect(img)
+        return _annotate_detections(img, detections), detections
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) > 2 else img
     _, thresholded = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     candidates = [
