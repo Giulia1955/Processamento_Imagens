@@ -50,6 +50,7 @@ functionsVideo = {
 }
 
 filters = []
+video_detector = YoloDetector()
 
 def setFilters(content):
     global filters
@@ -69,7 +70,7 @@ def process(img):
             img = functions[filter_idx](img)
     return img
 
-def processVideo(img, previous_detections=None, return_detections=False):
+def processVideo(img, previous_detections=None, return_detections=False, detector=None):
     detections = []
     for filter_idx, p1, p2 in filters:
         if filter_idx == 5:
@@ -77,7 +78,7 @@ def processVideo(img, previous_detections=None, return_detections=False):
         elif filter_idx == 10:
             img = functionsVideo[filter_idx](img, norm=(p2 == 1), cum=(p1 == 1))
         elif filter_idx == 16:
-            img, detections = functionsVideo[filter_idx](img, previous_detections)
+            img, detections = functionsVideo[filter_idx](img, previous_detections, detector)
         elif (3 <= filter_idx <= 13) or filter_idx == 15:
             img = functionsVideo[filter_idx](img, p1)
         else:
@@ -110,7 +111,7 @@ async def handler(websocket):
                         img = process(originalImg.copy())
                     elif streamType == 2:
                         img, previous_detections = processVideo(
-                            originalImg.copy(), previous_detections, True,
+                            originalImg.copy(), previous_detections, True, video_detector,
                         )
                     _, buffer = cv2.imencode('.png', img)
                     await websocket.send(buffer.tobytes())
@@ -147,7 +148,7 @@ async def handler(websocket):
                 originalImg = img.copy()
                 try:
                     img, previous_detections = processVideo(
-                        img, previous_detections, True,
+                        img, previous_detections, True, video_detector,
                     )
                 except Exception as e:
                     print(f"Erro no processamento de vídeo: {e}")

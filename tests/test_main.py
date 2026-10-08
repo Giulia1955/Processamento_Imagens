@@ -103,6 +103,33 @@ class ProcessVideoTests(unittest.TestCase):
         self.assertEqual([item['class_name'] for item in detections], ['person', 'cell phone'])
         self.assertEqual(len(detections), 2)
 
+    def test_track_video_keeps_detector_classes_and_assigns_ids(self):
+        class FakeDetector:
+            def detect(self, frame):
+                return [
+                    {'class_name': 'person', 'confidence': 0.91, 'bbox': (2, 3, 10, 20), 'center': (7, 13)},
+                    {'class_name': 'cell phone', 'confidence': 0.84, 'bbox': (30, 10, 8, 12), 'center': (34, 16)},
+                ]
+
+        frame = np.zeros((50, 60, 3), dtype=np.uint8)
+        annotated, detections = funcs.trackVideo(frame, detector=FakeDetector())
+
+        self.assertEqual(annotated.shape, frame.shape)
+        self.assertEqual([item['id'] for item in detections], ['object-1', 'object-2'])
+        self.assertEqual(len(detections), 2)
+
+    def test_track_video_returns_empty_detections_for_empty_frame(self):
+        class EmptyDetector:
+            def detect(self, frame):
+                return []
+
+        _, detections = funcs.trackVideo(
+            np.zeros((20, 20, 3), dtype=np.uint8),
+            detector=EmptyDetector(),
+        )
+
+        self.assertEqual(detections, [])
+
 
 if __name__ == '__main__':
     unittest.main()

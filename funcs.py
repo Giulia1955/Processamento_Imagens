@@ -403,8 +403,8 @@ def objects(img):
     return _annotated_components(img, 'number', 1)
 
 
-def trackVideo(img, previous_detections=None):
-    annotated, detections = detect_objects(img)
+def trackVideo(img, previous_detections=None, detector=None):
+    annotated, detections = detect_objects(img, detector=detector)
     return annotated, match_detections(previous_detections or [], detections)
 
 def videoMean(img, kernelSize):
